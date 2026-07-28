@@ -1,0 +1,8 @@
+{
+  "name": "farm-dashboard-root",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix farm-dashboard install && npm --prefix farm-dashboard run build",
+    "start": "npm --prefix farm-dashboard start"
+  }
+}
