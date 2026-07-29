@@ -65,6 +65,7 @@ const NODE_SILENCE_MS = 30000;
 let latestFrontendSettings = loadSettings();
 let lastMqttPayloadAt = 0;
 let nodeSilenceAlerted = false;
+let latestTelemetry = null;
 
 function isCoolingDown(id) {
   const last = cooldowns[id] || 0;
@@ -204,6 +205,10 @@ app.get('/api/telegram/chats', async (_, res) => {
   const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN is not set on the server' });
 
+  // The bot command poller owns getUpdates (Telegram allows only one consumer),
+  // so serve the chats it has already seen.
+  if (telegramPolling) return res.json({ chats: Object.values(telegramSeenChats) });
+
   try {
     const r = await fetch(`https://api.telegram.org/bot${token}/getUpdates`);
     const data = await r.json();
@@ -254,6 +259,7 @@ mqttClient.on('message', async (topic, message) => {
     nodeSilenceAlerted = false;
 
     if (topic === dataTopic) {
+      latestTelemetry = telemetry;
       const triggeredRules = checkAlertRules(telemetry);
 
       for (const rule of triggeredRules) {
@@ -304,6 +310,104 @@ setInterval(async () => {
 }, 5000);
 
 mqttClient.on('error', err => console.error('[MQTT] Error:', err.message));
+
+// ── Telegram bot commands ────────────────────────────────────────────────────
+// Long-polls getUpdates so the farmer can request a status report from chat:
+// /report replies with the latest pond readings, /help shows the chat ID.
+const telegramToken = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const telegramSeenChats = {};
+let telegramOffset = 0;
+let telegramPolling = false;
+
+function buildTextReport(telemetry) {
+  if (!telemetry) {
+    return "🐟 Leks' Farm — Pond 1\n\nNo sensor data received yet. Check that the pond node or simulator is publishing.";
+  }
+  const v = field => getChannelValue(telemetry, field) ?? 'N/A';
+  const range = telemetry.derived?.estimated_range || {};
+  const ago = lastMqttPayloadAt ? `${Math.round((Date.now() - lastMqttPayloadAt) / 1000)}s ago` : 'unknown';
+  return [
+    "🐟 Leks' Farm — Pond 1 status",
+    '',
+    `🌡 Temperature: ${v('temperature')} °C`,
+    `💧 pH: ${v('ph')}`,
+    `📏 Water level: ${v('water_level_pct')} %`,
+    `☁️ Ammonia: ${v('ammonia_risk')}`,
+    `🔒 Security: ${v('security_status')}`,
+    `🚿 Flow: ${v('flow_rate_lpm')} L/min · Pump: ${v('pump_status')} · Pipe: ${v('pipe_status')}`,
+    `🔋 Controller battery: ${v('controller_battery_pct')} %`,
+    `🫧 O₂ estimate: ${range.low ?? '—'}–${range.high ?? '—'} mg/L (risk: ${telemetry.derived?.risk_band ?? '—'})`,
+    '',
+    `⏱ Last payload: ${ago}`,
+  ].join('\n');
+}
+
+async function telegramApi(method, params) {
+  const res = await fetch(`https://api.telegram.org/bot${telegramToken}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params || {}),
+  });
+  return res.json().catch(() => ({}));
+}
+
+async function handleTelegramMessage(msg) {
+  const chat = msg.chat;
+  telegramSeenChats[chat.id] = {
+    id: chat.id,
+    name: [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.title || chat.username || String(chat.id),
+  };
+
+  // Don't replay answers to messages sent while the server was down.
+  if (msg.date && Date.now() / 1000 - msg.date > 300) return;
+
+  const text = (msg.text || '').trim().toLowerCase();
+  if (text.startsWith('/report') || text === 'report') {
+    await sendTelegram(chat.id, buildTextReport(latestTelemetry));
+    console.log(`[Telegram] Sent report to chat ${chat.id}`);
+  } else if (text.startsWith('/start') || text.startsWith('/help')) {
+    await sendTelegram(chat.id, [
+      "🐟 Leks' Farm bot is connected.",
+      `Your chat ID: ${chat.id}`,
+      '',
+      'Commands:',
+      '/report — current pond status',
+      '/help — show this message',
+      '',
+      'Save your chat ID on the dashboard Settings page to receive automatic alerts here.',
+    ].join('\n'));
+  }
+}
+
+async function pollTelegram() {
+  try {
+    const data = await telegramApi('getUpdates', { offset: telegramOffset, timeout: 25 });
+    if (data.ok) {
+      for (const update of data.result || []) {
+        telegramOffset = update.update_id + 1;
+        const msg = update.message || update.edited_message;
+        if (msg?.chat) await handleTelegramMessage(msg);
+      }
+    } else if (data.description) {
+      console.warn('[Telegram] getUpdates:', data.description);
+    }
+  } catch (e) {
+    console.warn('[Telegram] Poll error:', e.message);
+  }
+  setTimeout(pollTelegram, 1000);
+}
+
+if (telegramToken) {
+  telegramPolling = true;
+  telegramApi('setMyCommands', {
+    commands: [
+      { command: 'report', description: 'Get the current pond status report' },
+      { command: 'help', description: 'Show help and your chat ID' },
+    ],
+  }).catch(() => {});
+  pollTelegram();
+  console.log('[Telegram] Bot command polling started — send /report to the bot');
+}
 
 app.get('/health', (_, res) => res.json({ ok: true, uptime: process.uptime() }));
 
