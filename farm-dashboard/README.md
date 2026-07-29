@@ -158,6 +158,30 @@ Open the dashboard → Settings page → enter your phone/email → Save.
 
 ---
 
+## 🏓 Keep-Alive Ping (free hosting)
+
+Render's free tier puts the server to sleep after ~15 minutes without traffic.
+While asleep, the MQTT listener is dead — **no alerts fire**. Two pings keep it
+awake:
+
+1. **Self-ping** — the server pings its own `/ping` endpoint every 10 minutes.
+   Automatic on Render (uses `RENDER_EXTERNAL_URL`); elsewhere set
+   `KEEP_ALIVE_URL` to the server's public URL. Tune with `KEEP_ALIVE_MINUTES`.
+2. **External ping** — the GitHub Actions workflow
+   `.github/workflows/keep-alive.yml` pings the site every 10 minutes and also
+   wakes it after restarts/deploys. Set the `PING_URL` repository variable
+   (GitHub → Settings → Secrets and variables → Actions → Variables) to your
+   deployed URL. Runs from the `main` branch once merged.
+
+`GET /ping` returns server uptime, MQTT connection state, and seconds since the
+last sensor payload — handy for a quick health check from a phone:
+
+```json
+{ "pong": true, "uptime": 4211, "mqtt": "connected", "lastPayloadAgoSeconds": 3 }
+```
+
+---
+
 ## 🔌 Alert Thresholds
 
 | Sensor            | Warning           | Critical              |

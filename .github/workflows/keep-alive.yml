@@ -1,0 +1,39 @@
+name: Keep site awake
+
+# Pings the deployed dashboard so Render's free tier doesn't spin it down
+# (a sleeping server means the MQTT listener is dead and no alerts fire).
+# Set the PING_URL repository variable (Settings → Secrets and variables →
+# Actions → Variables) to your deployed URL; defaults to the Render URL below.
+#
+# Note: scheduled workflows only run from the default branch, so this becomes
+# active once merged into main. GitHub runs schedules best-effort — pings may
+# arrive a few minutes late, which is fine for keep-alive purposes.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the site
+        env:
+          PING_URL: ${{ vars.PING_URL }}
+        run: |
+          URL="${PING_URL:-https://farm-dashboard.onrender.com}"
+          echo "Pinging $URL/ping"
+          # Retry a few times: the first request to a sleeping Render service
+          # can take 30-60s while it cold-starts.
+          for i in 1 2 3; do
+            if curl -fsS --max-time 90 "$URL/ping"; then
+              echo
+              echo "Site is awake."
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 20s..."
+            sleep 20
+          done
+          echo "Site did not respond after 3 attempts."
+          exit 1

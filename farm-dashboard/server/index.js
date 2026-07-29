@@ -266,6 +266,31 @@ mqttClient.on('error', err => console.error('[MQTT] Error:', err.message));
 
 app.get('/health', (_, res) => res.json({ ok: true, uptime: process.uptime() }));
 
+app.get('/ping', (_, res) => res.json({
+  pong: true,
+  uptime: process.uptime(),
+  mqtt: mqttClient.connected ? 'connected' : 'disconnected',
+  lastPayloadAgoSeconds: lastMqttPayloadAt ? Math.round((Date.now() - lastMqttPayloadAt) / 1000) : null,
+}));
+
+// Render's free tier spins the service down after ~15 minutes without inbound
+// traffic; while asleep the MQTT listener is dead and no alerts fire. Pinging
+// our own public URL counts as traffic and keeps the service awake.
+// RENDER_EXTERNAL_URL is set automatically by Render.
+const keepAliveUrl = (process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+const KEEP_ALIVE_MS = (parseInt(process.env.KEEP_ALIVE_MINUTES) || 10) * 60 * 1000;
+
+if (keepAliveUrl) {
+  setInterval(async () => {
+    try {
+      const res = await fetch(`${keepAliveUrl}/ping`);
+      if (!res.ok) console.warn(`[KeepAlive] Ping returned HTTP ${res.status}`);
+    } catch (e) {
+      console.warn('[KeepAlive] Ping failed:', e.message);
+    }
+  }, KEEP_ALIVE_MS);
+}
+
 app.get('*', (_, res) => {
   const indexPath = path.join(distDir, 'index.html');
   if (fs.existsSync(indexPath)) {
@@ -349,5 +374,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   WhatsApp:  ${process.env.WHAPI_TOKEN ? '✅ Whapi configured' : '⚠️  WHAPI_TOKEN not set'}`);
   console.log(`   MQTT:      ${mqttUrl}`);
   console.log(`   Topics:    ${dataTopic}, ${alertsTopic}`);
-  console.log(`   Settings:  ${latestFrontendSettings ? 'loaded from file' : 'no saved settings'}\n`);
+  console.log(`   Settings:  ${latestFrontendSettings ? 'loaded from file' : 'no saved settings'}`);
+  console.log(`   KeepAlive: ${keepAliveUrl ? `pinging ${keepAliveUrl}/ping every ${KEEP_ALIVE_MS / 60000}m` : 'off (set KEEP_ALIVE_URL to enable)'}\n`);
 });
