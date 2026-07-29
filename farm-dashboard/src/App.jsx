@@ -47,8 +47,8 @@ const EMPTY_TELEMETRY = {
 };
 
 const DEFAULT_SETTINGS = {
-  phone: '', email: '', whatsapp: '',
-  smsEnabled: true, emailEnabled: true, whatsappEnabled: true,
+  phone: '', email: '', whatsapp: '', telegram: '',
+  smsEnabled: true, emailEnabled: true, whatsappEnabled: true, telegramEnabled: true,
   serverUrl: import.meta.env.VITE_SERVER_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'),
   mqttUrl: DEFAULT_MQTT_URL,
 };
@@ -275,6 +275,7 @@ export default function App() {
             phone: settings.smsEnabled ? settings.phone : null,
             email: settings.emailEnabled ? settings.email : null,
             whatsapp: settings.whatsappEnabled ? settings.whatsapp : null,
+            telegram: settings.telegramEnabled ? settings.telegram : null,
           },
         }),
       }).catch(() => {});
@@ -440,6 +441,7 @@ export default function App() {
             phone: settings.smsEnabled ? settings.phone : null,
             email: settings.emailEnabled ? settings.email : null,
             whatsapp: settings.whatsappEnabled ? settings.whatsapp : null,
+            telegram: settings.telegramEnabled ? settings.telegram : null,
           },
         }),
       });
@@ -467,11 +469,13 @@ export default function App() {
             phone: nextSettings.smsEnabled ? nextSettings.phone : null,
             email: nextSettings.emailEnabled ? nextSettings.email : null,
             whatsapp: nextSettings.whatsappEnabled ? nextSettings.whatsapp : null,
+            telegram: nextSettings.telegramEnabled ? nextSettings.telegram : null,
           },
           channels: {
             smsEnabled: nextSettings.smsEnabled,
             emailEnabled: nextSettings.emailEnabled,
             whatsappEnabled: nextSettings.whatsappEnabled,
+            telegramEnabled: nextSettings.telegramEnabled,
           },
           mqttUrl: nextSettings.mqttUrl,
         }),

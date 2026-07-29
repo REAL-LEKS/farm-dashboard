@@ -60,6 +60,25 @@ export async function sendEmail(to, subject, htmlContent) {
   return res.json();
 }
 
+export async function sendTelegram(chatId, message) {
+  const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (!TELEGRAM_BOT_TOKEN) {
+    throw new Error('TELEGRAM_BOT_TOKEN not set — create a bot with @BotFather and add its token');
+  }
+
+  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text: message }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.description || `Telegram send failed (${res.status})`);
+  }
+  return data;
+}
+
 export async function sendWhatsApp(to, message) {
   const WHAPI_TOKEN = (process.env.WHAPI_TOKEN || '').trim();
   const WHAPI_CHANNEL_URL = (process.env.WHAPI_CHANNEL_URL || '').trim();

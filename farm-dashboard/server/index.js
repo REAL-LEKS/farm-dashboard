@@ -14,7 +14,7 @@ import path from 'path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'url';
-import { sendSMS, sendEmail, sendWhatsApp } from './notifier.js';
+import { sendSMS, sendEmail, sendWhatsApp, sendTelegram } from './notifier.js';
 import {
   checkAlertRules,
   normalizeTelemetry,
@@ -84,6 +84,7 @@ async function dispatch({ message, severity, contacts, telemetry }) {
     { channel: 'SMS', target: contacts.phone, send: () => sendSMS(contacts.phone, smsText) },
     { channel: 'Email', target: contacts.email, send: () => sendEmail(contacts.email, subject, body) },
     { channel: 'WhatsApp', target: contacts.whatsapp, send: () => sendWhatsApp(contacts.whatsapp, smsText) },
+    { channel: 'Telegram', target: contacts.telegram, send: () => sendTelegram(contacts.telegram, smsText) },
   ];
 
   const settled = await Promise.allSettled(
@@ -180,11 +181,13 @@ app.post('/api/settings', (req, res) => {
       phone: contacts.phone || null,
       email: contacts.email || null,
       whatsapp: contacts.whatsapp || null,
+      telegram: contacts.telegram || null,
     },
     channels: {
       smsEnabled: Boolean(channels?.smsEnabled),
       emailEnabled: Boolean(channels?.emailEnabled),
       whatsappEnabled: Boolean(channels?.whatsappEnabled),
+      telegramEnabled: Boolean(channels?.telegramEnabled),
     },
     mqttUrl: mqttUrl || null,
     updatedAt: new Date().toISOString(),
@@ -193,6 +196,32 @@ app.post('/api/settings', (req, res) => {
   saveSettings(latestFrontendSettings);
   console.log('[API] Settings saved');
   res.json({ ok: true, updatedAt: latestFrontendSettings.updatedAt });
+});
+
+// Helps the Settings page discover the user's Telegram chat ID: after the user
+// messages the bot once, getUpdates lists that chat.
+app.get('/api/telegram/chats', async (_, res) => {
+  const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (!token) return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN is not set on the server' });
+
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/getUpdates`);
+    const data = await r.json();
+    if (!data.ok) return res.status(502).json({ error: data.description || 'Telegram API error' });
+
+    const chats = {};
+    for (const update of data.result || []) {
+      const chat = update.message?.chat || update.edited_message?.chat || update.channel_post?.chat;
+      if (!chat) continue;
+      chats[chat.id] = {
+        id: chat.id,
+        name: [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.title || chat.username || String(chat.id),
+      };
+    }
+    res.json({ chats: Object.values(chats) });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
 });
 
 // Default to the free public EMQX broker so the deployed server receives
@@ -236,6 +265,7 @@ mqttClient.on('message', async (topic, message) => {
           phone: process.env.ALERT_PHONE || null,
           email: process.env.ALERT_EMAIL || null,
           whatsapp: process.env.ALERT_WHATSAPP || null,
+          telegram: process.env.ALERT_TELEGRAM_CHAT_ID || null,
         };
 
         await dispatch({
@@ -262,6 +292,7 @@ setInterval(async () => {
     phone: process.env.ALERT_PHONE || null,
     email: process.env.ALERT_EMAIL || null,
     whatsapp: process.env.ALERT_WHATSAPP || null,
+    telegram: process.env.ALERT_TELEGRAM_CHAT_ID || null,
   };
 
   await dispatch({
@@ -382,6 +413,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   SMS:       ${process.env.TWILIO_SID ? '✅ Twilio configured' : '⚠️  TWILIO_SID not set'}`);
   console.log(`   Email:     ${process.env.BREVO_API_KEY ? '✅ Brevo configured' : '⚠️  BREVO_API_KEY not set'}`);
   console.log(`   WhatsApp:  ${process.env.WHAPI_TOKEN ? '✅ Whapi configured' : '⚠️  WHAPI_TOKEN not set'}`);
+  console.log(`   Telegram:  ${process.env.TELEGRAM_BOT_TOKEN ? '✅ Bot token configured' : '⚠️  TELEGRAM_BOT_TOKEN not set'}`);
   console.log(`   MQTT:      ${mqttUrl}`);
   console.log(`   Topics:    ${dataTopic}, ${alertsTopic}`);
   console.log(`   Settings:  ${latestFrontendSettings ? 'loaded from file' : 'no saved settings'}`);
