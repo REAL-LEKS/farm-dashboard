@@ -124,7 +124,29 @@ function readRuleValue(telemetry, field) {
   return getChannelValue(telemetry, field);
 }
 
-function getPriorityAction(telemetry, isNodeStale) {
+function getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus) {
+  if (!hasReceivedPayload) {
+    if (connectionStatus === 'error' || connectionStatus === 'offline') {
+      return {
+        severity: 'critical',
+        title: 'Broker unreachable',
+        message: 'Cannot connect to the MQTT broker. Check the MQTT Broker URL on the Settings page and your internet connection.',
+      };
+    }
+    if (connectionStatus === 'connecting') {
+      return {
+        severity: 'waiting',
+        title: 'Connecting to broker',
+        message: 'Opening the MQTT connection — this normally takes a few seconds.',
+      };
+    }
+    return {
+      severity: 'waiting',
+      title: 'Waiting for data',
+      message: `Broker link is up but no sensor payload has arrived yet. Make sure the simulator or sensor node is publishing to ${MQTT_DATA_TOPIC} on the same broker.`,
+    };
+  }
+
   if (isNodeStale) {
     return {
       severity: 'critical',
@@ -461,7 +483,7 @@ export default function App() {
     { id: 'settings', icon: Settings, label: 'Settings' },
   ];
 
-  const activeAction = getPriorityAction(telemetry, isNodeStale);
+  const activeAction = getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus);
 
   return (
     <div className={`min-h-screen bg-[#0a0f1a] text-slate-200 font-sans flex ${isNodeStale ? 'opacity-70 saturate-50' : ''}`}>
@@ -700,13 +722,19 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
 function PriorityActionCard({ action, isNodeStale }) {
   const tone = action.severity === 'critical'
     ? 'from-red-500/20 to-red-500/5 border-red-500/30 text-red-100'
+    : action.severity === 'waiting'
+    ? 'from-yellow-500/20 to-yellow-500/5 border-yellow-500/30 text-yellow-100'
     : 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30 text-emerald-100';
 
   return (
     <div className={`rounded-2xl border bg-gradient-to-br ${tone} p-5 shadow-lg`}>
       <div className="flex items-start gap-3">
-        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${action.severity === 'critical' ? 'bg-red-500/15' : 'bg-emerald-500/15'}`}>
-          {action.severity === 'critical' ? <ShieldAlert className="text-red-300" size={20} /> : <Activity className="text-emerald-300" size={20} />}
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${action.severity === 'critical' ? 'bg-red-500/15' : action.severity === 'waiting' ? 'bg-yellow-500/15' : 'bg-emerald-500/15'}`}>
+          {action.severity === 'critical'
+            ? <ShieldAlert className="text-red-300" size={20} />
+            : action.severity === 'waiting'
+            ? <Wifi className="text-yellow-300 animate-pulse" size={20} />
+            : <Activity className="text-emerald-300" size={20} />}
         </div>
         <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{isNodeStale ? 'Highest active condition' : 'Current priority'}</p>
