@@ -141,6 +141,9 @@ forever with no message limits:
 3. Open your new bot in Telegram and send it any message
 4. On the dashboard Settings page, click **Detect my Chat ID** → Save
 
+Once connected, you can also message the bot **`/report`** at any time and it
+replies with the current pond status — no dashboard needed.
+
 ### Step 3 — Fill in server/.env
 
 ```env

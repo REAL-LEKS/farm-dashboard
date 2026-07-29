@@ -506,7 +506,7 @@ export default function App() {
   const activeAction = getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus);
 
   return (
-    <div className={`min-h-screen bg-[#0a0f1a] text-slate-200 font-sans flex ${isNodeStale ? 'opacity-70 saturate-50' : ''}`}>
+    <div className="min-h-screen bg-[#0a0f1a] text-slate-200 font-sans flex">
       <aside className="w-20 md:w-64 bg-[#0d1526] border-r border-slate-800/60 flex flex-col py-6 px-3 md:px-5 shrink-0">
         <div className="flex items-center gap-3 mb-10 px-1">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
@@ -632,7 +632,7 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
           <WifiOff className="text-red-400 shrink-0" size={22} />
           <div>
             <p className="text-red-400 font-bold text-sm">NODE SILENCE</p>
-            <p className="text-red-300/70 text-xs">No MQTT payload has arrived for 30 seconds. The board is dimmed until data resumes.</p>
+            <p className="text-red-300/70 text-xs">No MQTT payload has arrived for 30 seconds. Cards show the last received readings until data resumes.</p>
           </div>
         </div>
       )}
