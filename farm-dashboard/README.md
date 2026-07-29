@@ -127,9 +127,19 @@ cp .env.example .env
 
 | Channel   | Service         | Free Tier                      | Sign Up |
 |-----------|-----------------|-------------------------------|---------|
+| Telegram  | Telegram Bot API| Free forever, unlimited        | Message @BotFather in Telegram |
 | Email     | Brevo           | 300 emails/day forever         | https://app.brevo.com |
-| SMS       | Twilio          | $15 free credit                | https://twilio.com |
+| SMS       | Twilio          | $15 free credit, then paid     | https://twilio.com |
 | WhatsApp  | Whapi.Cloud     | Free sandbox (scan QR code)    | https://whapi.cloud |
+
+**Telegram is the recommended channel** — it is the only one that is free
+forever with no message limits:
+
+1. In Telegram, message **@BotFather** → send `/newbot` → follow the prompts →
+   copy the bot token it gives you
+2. Set `TELEGRAM_BOT_TOKEN` on the server (Render → Environment, or `.env`)
+3. Open your new bot in Telegram and send it any message
+4. On the dashboard Settings page, click **Detect my Chat ID** → Save
 
 ### Step 3 — Fill in server/.env
 

@@ -1,12 +1,38 @@
 import React, { useState } from 'react';
-import { Mail, Phone, MessageCircle, Server, Save, CheckCircle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Mail, Phone, MessageCircle, Send, Server, Save, CheckCircle, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export default function NotifySettings({ settings, setSettings, onSave }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [tgStatus, setTgStatus] = useState('');
 
   const update = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
+
+  const detectTelegramChat = async () => {
+    if (!settings.serverUrl) {
+      setTgStatus('Set the Notification Server URL first.');
+      return;
+    }
+    setTgStatus('Looking for chats…');
+    try {
+      const response = await fetch(`${settings.serverUrl}/api/telegram/chats`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setTgStatus(data.error || 'Could not query Telegram');
+        return;
+      }
+      if (!data.chats?.length) {
+        setTgStatus('No chats found. Open Telegram, send your bot any message, then try again.');
+        return;
+      }
+      const chat = data.chats[data.chats.length - 1];
+      update('telegram', String(chat.id));
+      setTgStatus(`Found chat: ${chat.name} (${chat.id}) — click Save Settings to keep it.`);
+    } catch {
+      setTgStatus('Cannot reach backend server');
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -75,6 +101,29 @@ export default function NotifySettings({ settings, setSettings, onSave }) {
           onChange={v => update('phone', v)}
           help="Sent via Twilio (free trial: $15 credit). Set TWILIO_* keys in .env"
         />
+      </ChannelCard>
+
+      <ChannelCard
+        icon={Send} color="sky" title="Telegram Alerts"
+        enabled={settings.telegramEnabled}
+        onToggle={() => update('telegramEnabled', !settings.telegramEnabled)}
+      >
+        <Field
+          label="Telegram Chat ID"
+          placeholder="123456789"
+          value={settings.telegram}
+          onChange={v => update('telegram', v)}
+          help="Free forever. Create a bot with @BotFather, set TELEGRAM_BOT_TOKEN on the server, send your bot one message, then click Detect below."
+        />
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <button
+            onClick={detectTelegramChat}
+            className="text-xs font-semibold text-sky-300 border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 rounded-lg px-3 py-2 transition-colors"
+          >
+            Detect my Chat ID
+          </button>
+          {tgStatus && <p className="text-slate-400 text-[11px]">{tgStatus}</p>}
+        </div>
       </ChannelCard>
 
       <ChannelCard
