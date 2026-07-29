@@ -212,6 +212,12 @@ function loadStoredSettings() {
     // Migrate settings saved before the online broker existed: anyone still on
     // the old localhost default gets moved to the online broker automatically.
     if (merged.mqttUrl === LEGACY_MQTT_URL) merged.mqttUrl = DEFAULT_MQTT_URL;
+    // Same for the backend URL: a localhost value saved during local testing is
+    // unreachable once the dashboard is opened from a deployed domain.
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1') && merged.serverUrl?.includes('localhost')) {
+      merged.serverUrl = DEFAULT_SETTINGS.serverUrl;
+    }
     return merged;
   } catch {
     return DEFAULT_SETTINGS;
