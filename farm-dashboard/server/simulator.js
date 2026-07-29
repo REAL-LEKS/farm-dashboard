@@ -253,7 +253,17 @@ const SCENARIOS = {
   },
 };
 
+let publishing = false;
+let connectFailures = 0;
+
 client.on('connect', () => {
+  connectFailures = 0;
+  if (publishing) {
+    console.log('🔁 Reconnected to broker — publishing resumes.');
+    return;
+  }
+  publishing = true;
+
   console.log(`\n🐟 Leks' Farm Simulator`);
   console.log(`   MQTT:     ${MQTT_URL}`);
   console.log(`   Topics:   ${DATA_TOPIC}, ${ALERTS_TOPIC}`);
@@ -302,12 +312,21 @@ client.on('connect', () => {
 });
 
 client.on('error', err => {
-  console.error('\n❌ MQTT connection failed:', err.message);
-  console.error(`   Broker: ${MQTT_URL}`);
-  console.error('   Check your internet connection, or set MQTT_URL to a reachable broker.\n');
-  process.exit(1);
+  connectFailures += 1;
+  console.error(`❌ MQTT connection error (attempt ${connectFailures}): ${err.message}`);
+
+  if (connectFailures === 3) {
+    console.error(`\n   Still cannot reach ${MQTT_URL}.`);
+    console.error('   Many WiFi and mobile networks block port 1883 — try the TLS or');
+    console.error('   WebSocket ports instead, then run the simulator again:');
+    console.error('     Windows:    set MQTT_URL=wss://broker.emqx.io:8084/mqtt');
+    console.error('                 set MQTT_URL=mqtts://broker.emqx.io:8883');
+    console.error('     macOS/Linux: MQTT_URL=wss://broker.emqx.io:8084/mqtt node simulator.js');
+    console.error('   Also check your internet connection (a phone hotspot is a quick test).');
+    console.error('   Retrying the current URL every 5 seconds — Ctrl+C to stop.\n');
+  }
 });
 
 client.on('close', () => {
-  console.log('\n🔌 Disconnected from MQTT broker.');
+  if (publishing) console.log('🔌 Connection lost — retrying...');
 });
