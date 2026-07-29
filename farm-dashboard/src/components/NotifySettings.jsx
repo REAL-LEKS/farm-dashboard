@@ -42,10 +42,10 @@ export default function NotifySettings({ settings, setSettings, onSave }) {
         />
         <Field
           label="MQTT Broker URL"
-          placeholder="ws://localhost:9001"
+          placeholder="wss://broker.emqx.io:8084/mqtt"
           value={settings.mqttUrl}
           onChange={v => update('mqttUrl', v)}
-          help="WebSocket address of your MQTT broker. For hardware on your network use ws://<device-ip>:9001"
+          help="WebSocket address of your MQTT broker. Default is the free public EMQX broker (online, works from anywhere). For a local broker use ws://localhost:9001"
         />
       </div>
 

@@ -8,3 +8,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: MQTT_URL
+        value: mqtt://broker.emqx.io:1883
+      - key: VITE_MQTT_URL
+        value: wss://broker.emqx.io:8084/mqtt
+      - key: MQTT_TOPIC_BASE
+        value: leksfarm/pond1
+      - key: VITE_MQTT_TOPIC_BASE
+        value: leksfarm/pond1

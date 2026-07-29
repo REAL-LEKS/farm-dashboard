@@ -13,6 +13,15 @@ import {
 const COOLDOWN_MS = 10 * 60 * 1000;
 const NODE_SILENCE_MS = 30 * 1000;
 
+// Browsers require WebSocket MQTT; wss:// is mandatory when the page is served
+// over HTTPS (e.g. the Render deployment). EMQX's public broker is free and
+// needs no account — override with VITE_MQTT_URL for a private broker.
+const DEFAULT_MQTT_URL = import.meta.env.VITE_MQTT_URL || 'wss://broker.emqx.io:8084/mqtt';
+const LEGACY_MQTT_URL = 'ws://localhost:9001';
+const MQTT_TOPIC_BASE = import.meta.env.VITE_MQTT_TOPIC_BASE || 'leksfarm/pond1';
+const MQTT_DATA_TOPIC = `${MQTT_TOPIC_BASE}/data`;
+const MQTT_ALERTS_TOPIC = `${MQTT_TOPIC_BASE}/alerts`;
+
 const DEFAULT_CHANNEL = (value, status = 'live', age_seconds = null) => ({ value, status, age_seconds });
 
 const EMPTY_TELEMETRY = {
@@ -41,7 +50,7 @@ const DEFAULT_SETTINGS = {
   phone: '', email: '', whatsapp: '',
   smsEnabled: true, emailEnabled: true, whatsappEnabled: true,
   serverUrl: import.meta.env.VITE_SERVER_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'),
-  mqttUrl: import.meta.env.VITE_MQTT_URL || 'ws://localhost:9001',
+  mqttUrl: DEFAULT_MQTT_URL,
 };
 
 const ALERT_RULES = [
@@ -176,7 +185,12 @@ function formatUptime(seconds) {
 function loadStoredSettings() {
   try {
     const stored = localStorage.getItem('farm_settings');
-    return stored ? { ...DEFAULT_SETTINGS, ...JSON.parse(stored) } : DEFAULT_SETTINGS;
+    if (!stored) return DEFAULT_SETTINGS;
+    const merged = { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+    // Migrate settings saved before the online broker existed: anyone still on
+    // the old localhost default gets moved to the online broker automatically.
+    if (merged.mqttUrl === LEGACY_MQTT_URL) merged.mqttUrl = DEFAULT_MQTT_URL;
+    return merged;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -263,9 +277,9 @@ export default function App() {
     setConnectionStatus('connecting');
 
     client.on('connect', () => {
-      client.subscribe('farm/pond1/data', err => {
+      client.subscribe(MQTT_DATA_TOPIC, err => {
         if (!err) {
-          client.subscribe('farm/pond1/alerts', err2 => {
+          client.subscribe(MQTT_ALERTS_TOPIC, err2 => {
             if (!err2) {
               setIsConnected(true);
               setConnectionStatus('connected');
@@ -294,7 +308,7 @@ export default function App() {
         setIsNodeStale(false);
         nodeSilenceAlerted.current = false;
 
-        if (topic === 'farm/pond1/data') {
+        if (topic === MQTT_DATA_TOPIC) {
           setTelemetry(snapshot);
 
           const derived = snapshot.derived || EMPTY_TELEMETRY.derived;
@@ -315,7 +329,7 @@ export default function App() {
             if (value === undefined || value === null) return;
             if (rule.check(value)) fireAlert(rule, snapshot);
           });
-        } else if (topic === 'farm/pond1/alerts') {
+        } else if (topic === MQTT_ALERTS_TOPIC) {
           setTelemetry(prev => ({
             ...prev,
             security_status: DEFAULT_CHANNEL(payload.status || 'CLEAR'),

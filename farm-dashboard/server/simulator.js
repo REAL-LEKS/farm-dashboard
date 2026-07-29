@@ -7,18 +7,22 @@
  * Usage: node simulator.js
  *
  * Options (env vars):
- *   MQTT_URL=mqtt://localhost:1883   (default)
- *   INTERVAL_MS=2000                 (publish every 2s by default)
+ *   MQTT_URL=mqtt://broker.emqx.io:1883   (default — free public online broker)
+ *   MQTT_TOPIC_BASE=leksfarm/pond1        (default)
+ *   INTERVAL_MS=2000                      (publish every 2s by default)
  *   SCENARIO=normal|crisis|intruder|faults
  */
 
 import mqtt from 'mqtt';
 
-const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
+const MQTT_URL = process.env.MQTT_URL || 'mqtt://broker.emqx.io:1883';
+const TOPIC_BASE = process.env.MQTT_TOPIC_BASE || 'leksfarm/pond1';
+const DATA_TOPIC = `${TOPIC_BASE}/data`;
+const ALERTS_TOPIC = `${TOPIC_BASE}/alerts`;
 const INTERVAL_MS = parseInt(process.env.INTERVAL_MS, 10) || 2000;
 const SCENARIO = process.env.SCENARIO || 'normal';
 
-const client = mqtt.connect(MQTT_URL);
+const client = mqtt.connect(MQTT_URL, { reconnectPeriod: 5000, connectTimeout: 15000 });
 
 const sin = (t, period, amp, mid) => mid + amp * Math.sin((2 * Math.PI * t) / period);
 const noise = amount => (Math.random() - 0.5) * amount;
@@ -252,6 +256,7 @@ const SCENARIOS = {
 client.on('connect', () => {
   console.log(`\n🐟 Leks' Farm Simulator`);
   console.log(`   MQTT:     ${MQTT_URL}`);
+  console.log(`   Topics:   ${DATA_TOPIC}, ${ALERTS_TOPIC}`);
   console.log(`   Scenario: ${SCENARIO}`);
   console.log(`   Interval: ${INTERVAL_MS}ms`);
   console.log(`\n   Press Ctrl+C to stop.\n`);
@@ -261,10 +266,10 @@ client.on('connect', () => {
 
   const publish = () => {
     const payload = scenarioFn(elapsedSeconds);
-    client.publish('farm/pond1/data', JSON.stringify(payload), { retain: true });
+    client.publish(DATA_TOPIC, JSON.stringify(payload), { retain: true });
 
     if (payload.security_status?.value === 'MOTION_DETECTED') {
-      client.publish('farm/pond1/alerts', JSON.stringify({ status: 'MOTION_DETECTED' }));
+      client.publish(ALERTS_TOPIC, JSON.stringify({ status: 'MOTION_DETECTED' }));
     }
 
     const now = new Date().toLocaleTimeString();
@@ -298,7 +303,8 @@ client.on('connect', () => {
 
 client.on('error', err => {
   console.error('\n❌ MQTT connection failed:', err.message);
-  console.error('   Make sure Mosquitto is running: mosquitto -v\n');
+  console.error(`   Broker: ${MQTT_URL}`);
+  console.error('   Check your internet connection, or set MQTT_URL to a reachable broker.\n');
   process.exit(1);
 });
 
