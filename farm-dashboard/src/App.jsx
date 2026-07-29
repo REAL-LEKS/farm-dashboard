@@ -231,6 +231,7 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState('--:--:--');
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [sendingReport, setSendingReport] = useState(false);
+  const [reportResult, setReportResult] = useState(null);
   const [isNodeStale, setIsNodeStale] = useState(false);
   const [hasReceivedPayload, setHasReceivedPayload] = useState(false);
   const [telemetry, setTelemetry] = useState(EMPTY_TELEMETRY);
@@ -428,8 +429,9 @@ export default function App() {
   const sendManualReport = async () => {
     if (!settings.serverUrl || sendingReport) return;
     setSendingReport(true);
+    setReportResult(null);
     try {
-      await fetch(`${settings.serverUrl}/api/report`, {
+      const response = await fetch(`${settings.serverUrl}/api/report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -441,7 +443,15 @@ export default function App() {
           },
         }),
       });
-    } catch {}
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        setReportResult({ error: payload?.error || `Server rejected the report (HTTP ${response.status})` });
+      } else {
+        setReportResult({ results: payload.results || [], time: new Date().toLocaleTimeString() });
+      }
+    } catch {
+      setReportResult({ error: 'Cannot reach backend server — check the Notification Server URL in Settings' });
+    }
     setSendingReport(false);
   };
 
@@ -569,6 +579,7 @@ export default function App() {
         </header>
 
         <div className="p-6">
+          {reportResult && <ReportResultBanner result={reportResult} onDismiss={() => setReportResult(null)} />}
           {page === 'dashboard' && (
             <DashboardPage
               telemetry={telemetry}
@@ -721,6 +732,51 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ReportResultBanner({ result, onDismiss }) {
+  const statusStyle = {
+    sent: 'text-emerald-400',
+    failed: 'text-red-400',
+    skipped: 'text-slate-500',
+  };
+  const statusIcon = { sent: '✅', failed: '❌', skipped: '⏭️' };
+  const anySent = result.results?.some(r => r.status === 'sent');
+  const anyFailed = result.results?.some(r => r.status === 'failed');
+
+  return (
+    <div className={`mb-6 rounded-xl border p-4 ${result.error || (anyFailed && !anySent)
+      ? 'bg-red-900/10 border-red-800/40'
+      : anyFailed
+      ? 'bg-yellow-900/10 border-yellow-800/40'
+      : 'bg-emerald-900/10 border-emerald-800/40'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-white font-bold text-sm">
+            {result.error ? 'Report could not be sent' : `Report delivery${result.time ? ` · ${result.time}` : ''}`}
+          </p>
+          {result.error ? (
+            <p className="text-red-400 text-xs mt-1">{result.error}</p>
+          ) : (
+            <ul className="mt-2 space-y-1">
+              {result.results.map(r => (
+                <li key={r.channel} className="text-xs flex gap-2">
+                  <span>{statusIcon[r.status] || '•'}</span>
+                  <span className="text-slate-300 font-semibold w-16 shrink-0">{r.channel}</span>
+                  <span className={statusStyle[r.status] || 'text-slate-400'}>
+                    {r.status === 'sent' ? r.detail || 'Sent' : r.status === 'skipped' ? r.detail || 'Skipped' : r.detail || 'Failed'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <button onClick={onDismiss} className="text-slate-500 hover:text-white text-xs border border-slate-700 rounded px-2 py-1 shrink-0">
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }

@@ -80,16 +80,26 @@ async function dispatch({ message, severity, contacts, telemetry }) {
   const body = buildEmailBody(message, telemetry);
   const smsText = `[Leks' Farm ${severity.toUpperCase()}] ${message} | Pond 1`;
 
-  const results = await Promise.allSettled([
-    contacts.phone ? sendSMS(contacts.phone, smsText) : Promise.resolve(),
-    contacts.email ? sendEmail(contacts.email, subject, body) : Promise.resolve(),
-    contacts.whatsapp ? sendWhatsApp(contacts.whatsapp, smsText) : Promise.resolve(),
-  ]);
+  const channels = [
+    { channel: 'SMS', target: contacts.phone, send: () => sendSMS(contacts.phone, smsText) },
+    { channel: 'Email', target: contacts.email, send: () => sendEmail(contacts.email, subject, body) },
+    { channel: 'WhatsApp', target: contacts.whatsapp, send: () => sendWhatsApp(contacts.whatsapp, smsText) },
+  ];
 
-  results.forEach((r, i) => {
-    const ch = ['SMS', 'Email', 'WhatsApp'][i];
-    if (r.status === 'rejected') console.error(`[${ch}] Failed:`, r.reason?.message || r.reason);
-    else console.log(`[${ch}] Sent OK`);
+  const settled = await Promise.allSettled(
+    channels.map(c => (c.target ? c.send() : Promise.resolve(null)))
+  );
+
+  return channels.map((c, i) => {
+    if (!c.target) return { channel: c.channel, status: 'skipped', detail: 'No recipient set or channel disabled' };
+    const r = settled[i];
+    if (r.status === 'rejected') {
+      const detail = r.reason?.message || String(r.reason);
+      console.error(`[${c.channel}] Failed:`, detail);
+      return { channel: c.channel, status: 'failed', detail };
+    }
+    console.log(`[${c.channel}] Sent OK`);
+    return { channel: c.channel, status: 'sent', detail: `Sent to ${c.target}` };
   });
 }
 
@@ -135,14 +145,14 @@ app.post('/api/notify', async (req, res) => {
   }
   setCooldown(alertId);
 
-  await dispatch({
+  const results = await dispatch({
     message: alert.message,
     severity: alert.severity,
     contacts: resolvedContacts,
     telemetry: alert.telemetry,
   });
 
-  res.json({ ok: true });
+  res.json({ ok: results.some(r => r.status === 'sent'), results });
 });
 
 app.post('/api/report', async (req, res) => {
@@ -153,8 +163,8 @@ app.post('/api/report', async (req, res) => {
   const resolvedContacts = contacts || latestFrontendSettings?.contacts;
   if (!resolvedContacts) return res.status(400).json({ error: 'Missing contacts' });
 
-  await dispatch({ message, severity: 'info', contacts: resolvedContacts, telemetry: normalizedTelemetry });
-  res.json({ ok: true });
+  const results = await dispatch({ message, severity: 'info', contacts: resolvedContacts, telemetry: normalizedTelemetry });
+  res.json({ ok: results.some(r => r.status === 'sent'), results });
 });
 
 app.get('/api/settings', (req, res) => {
