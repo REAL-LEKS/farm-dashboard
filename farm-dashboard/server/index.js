@@ -185,14 +185,27 @@ app.post('/api/settings', (req, res) => {
   res.json({ ok: true, updatedAt: latestFrontendSettings.updatedAt });
 });
 
-const mqttUrl = process.env.MQTT_URL || 'mqtt://localhost:1883';
-const mqttClient = mqtt.connect(mqttUrl);
+// Default to the free public EMQX broker so the deployed server receives
+// online data with zero broker setup. Override with MQTT_URL for a private broker.
+const mqttUrl = process.env.MQTT_URL || 'mqtt://broker.emqx.io:1883';
+// Public brokers are shared — keep the topic base unique to this farm.
+const topicBase = process.env.MQTT_TOPIC_BASE || 'leksfarm/pond1';
+const dataTopic = `${topicBase}/data`;
+const alertsTopic = `${topicBase}/alerts`;
+
+const mqttClient = mqtt.connect(mqttUrl, {
+  reconnectPeriod: 5000,
+  connectTimeout: 15000,
+});
 
 mqttClient.on('connect', () => {
   console.log('[MQTT] Connected to broker:', mqttUrl);
-  mqttClient.subscribe('farm/pond1/data');
-  mqttClient.subscribe('farm/pond1/alerts');
+  mqttClient.subscribe(dataTopic);
+  mqttClient.subscribe(alertsTopic);
 });
+
+mqttClient.on('reconnect', () => console.log('[MQTT] Reconnecting to broker...'));
+mqttClient.on('offline', () => console.warn('[MQTT] Broker connection offline'));
 
 mqttClient.on('message', async (topic, message) => {
   try {
@@ -201,7 +214,7 @@ mqttClient.on('message', async (topic, message) => {
     lastMqttPayloadAt = Date.now();
     nodeSilenceAlerted = false;
 
-    if (topic === 'farm/pond1/data') {
+    if (topic === dataTopic) {
       const triggeredRules = checkAlertRules(telemetry);
 
       for (const rule of triggeredRules) {
@@ -252,6 +265,31 @@ setInterval(async () => {
 mqttClient.on('error', err => console.error('[MQTT] Error:', err.message));
 
 app.get('/health', (_, res) => res.json({ ok: true, uptime: process.uptime() }));
+
+app.get('/ping', (_, res) => res.json({
+  pong: true,
+  uptime: process.uptime(),
+  mqtt: mqttClient.connected ? 'connected' : 'disconnected',
+  lastPayloadAgoSeconds: lastMqttPayloadAt ? Math.round((Date.now() - lastMqttPayloadAt) / 1000) : null,
+}));
+
+// Render's free tier spins the service down after ~15 minutes without inbound
+// traffic; while asleep the MQTT listener is dead and no alerts fire. Pinging
+// our own public URL counts as traffic and keeps the service awake.
+// RENDER_EXTERNAL_URL is set automatically by Render.
+const keepAliveUrl = (process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+const KEEP_ALIVE_MS = (parseInt(process.env.KEEP_ALIVE_MINUTES) || 10) * 60 * 1000;
+
+if (keepAliveUrl) {
+  setInterval(async () => {
+    try {
+      const res = await fetch(`${keepAliveUrl}/ping`);
+      if (!res.ok) console.warn(`[KeepAlive] Ping returned HTTP ${res.status}`);
+    } catch (e) {
+      console.warn('[KeepAlive] Ping failed:', e.message);
+    }
+  }, KEEP_ALIVE_MS);
+}
 
 app.get('*', (_, res) => {
   const indexPath = path.join(distDir, 'index.html');
@@ -335,5 +373,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   Email:     ${process.env.BREVO_API_KEY ? '✅ Brevo configured' : '⚠️  BREVO_API_KEY not set'}`);
   console.log(`   WhatsApp:  ${process.env.WHAPI_TOKEN ? '✅ Whapi configured' : '⚠️  WHAPI_TOKEN not set'}`);
   console.log(`   MQTT:      ${mqttUrl}`);
-  console.log(`   Settings:  ${latestFrontendSettings ? 'loaded from file' : 'no saved settings'}\n`);
+  console.log(`   Topics:    ${dataTopic}, ${alertsTopic}`);
+  console.log(`   Settings:  ${latestFrontendSettings ? 'loaded from file' : 'no saved settings'}`);
+  console.log(`   KeepAlive: ${keepAliveUrl ? `pinging ${keepAliveUrl}/ping every ${KEEP_ALIVE_MS / 60000}m` : 'off (set KEEP_ALIVE_URL to enable)'}\n`);
 });

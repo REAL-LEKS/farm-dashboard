@@ -29,34 +29,35 @@ farm-dashboard/
 
 ---
 
-## ⚡ Quick Start (with simulator — no hardware needed)
+## 🌍 Online Data Connection
 
-### Step 1 — Install Mosquitto (MQTT broker)
+The app is wired to the **free public EMQX broker** (`broker.emqx.io`) by default,
+so data flows over the internet with zero broker setup:
 
-| OS      | Command |
-|---------|---------|
-| Windows | Download installer from https://mosquitto.org/download/ |
-| macOS   | `brew install mosquitto` |
-| Ubuntu  | `sudo apt install mosquitto` |
+```
+Sensors / Simulator ──mqtt://broker.emqx.io:1883──▶ ┌──────────────────┐
+                                                    │  EMQX broker      │
+Dashboard (browser) ◀─wss://broker.emqx.io:8084/mqtt┤  (public, online) │
+Notification server ◀──mqtt://broker.emqx.io:1883───┘
+```
 
-### Step 2 — Start the broker
+- **Browser** connects over secure WebSockets (`wss://`) — required when the
+  dashboard is served over HTTPS (e.g. on Render).
+- **Server, simulator, and hardware** connect over plain MQTT (`mqtt://`, port 1883).
+- Topics live under a farm-specific base (`leksfarm/pond1` by default). The public
+  broker is shared by everyone, so set `MQTT_TOPIC_BASE` / `VITE_MQTT_TOPIC_BASE`
+  to something unique to your farm — all parts must use the same value.
+- To use your own private broker instead, set `MQTT_URL` (server/simulator) and
+  `VITE_MQTT_URL` (frontend), or change the MQTT Broker URL on the dashboard's
+  Settings page.
+
+---
+
+## ⚡ Quick Start (with simulator — no hardware, no broker install needed)
+
+### Step 1 — Start the frontend
 
 ```bash
-# From the farm-dashboard folder:
-mosquitto -c mosquitto.conf
-```
-
-You should see:
-```
-1234567890: mosquitto version 2.x starting
-1234567890: Opening ipv4 listen socket on port 1883
-1234567890: Opening websockets listen socket on port 9001
-```
-
-### Step 3 — Start the frontend
-
-```bash
-# In a new terminal:
 cd farm-dashboard
 npm install
 npm run dev
@@ -64,16 +65,23 @@ npm run dev
 
 Open http://localhost:5173 in your browser.
 
-### Step 4 — Run the simulator
+### Step 2 — Run the simulator
 
 ```bash
-# In another new terminal:
+# In another terminal:
 cd farm-dashboard/server
 npm install
 node simulator.js
 ```
 
-The dashboard will now show live updating sensor data!
+The dashboard will now show live updating sensor data — streamed through the
+online broker, so it works even when the dashboard and simulator run on
+different machines or networks.
+
+> **Offline / local option:** install Mosquitto and run
+> `mosquitto -c mosquitto.conf`, then set `MQTT_URL=mqtt://localhost:1883` for
+> the simulator/server and enter `ws://localhost:9001` as the MQTT Broker URL on
+> the dashboard's Settings page.
 
 ---
 
@@ -150,6 +158,30 @@ Open the dashboard → Settings page → enter your phone/email → Save.
 
 ---
 
+## 🏓 Keep-Alive Ping (free hosting)
+
+Render's free tier puts the server to sleep after ~15 minutes without traffic.
+While asleep, the MQTT listener is dead — **no alerts fire**. Two pings keep it
+awake:
+
+1. **Self-ping** — the server pings its own `/ping` endpoint every 10 minutes.
+   Automatic on Render (uses `RENDER_EXTERNAL_URL`); elsewhere set
+   `KEEP_ALIVE_URL` to the server's public URL. Tune with `KEEP_ALIVE_MINUTES`.
+2. **External ping** — the GitHub Actions workflow
+   `.github/workflows/keep-alive.yml` pings the site every 10 minutes and also
+   wakes it after restarts/deploys. Set the `PING_URL` repository variable
+   (GitHub → Settings → Secrets and variables → Actions → Variables) to your
+   deployed URL. Runs from the `main` branch once merged.
+
+`GET /ping` returns server uptime, MQTT connection state, and seconds since the
+last sensor payload — handy for a quick health check from a phone:
+
+```json
+{ "pong": true, "uptime": 4211, "mqtt": "connected", "lastPayloadAgoSeconds": 3 }
+```
+
+---
+
 ## 🔌 Alert Thresholds
 
 | Sensor            | Warning           | Critical              |
@@ -168,27 +200,29 @@ Alerts have a **10-minute cooldown** per rule to prevent notification spam.
 
 ## 🔧 Running Everything Together
 
-Open 3 terminals:
+Open 2 terminals (the online broker replaces local Mosquitto):
 
 ```
-Terminal 1:  mosquitto -c mosquitto.conf
-Terminal 2:  cd farm-dashboard && npm run dev
-Terminal 3:  cd farm-dashboard/server && node simulator.js
+Terminal 1:  cd farm-dashboard && npm run dev
+Terminal 2:  cd farm-dashboard/server && node simulator.js
 ```
 
-Optional 4th terminal for notifications:
+Optional 3rd terminal for notifications:
 ```
-Terminal 4:  cd farm-dashboard/server && node index.js
+Terminal 3:  cd farm-dashboard/server && node index.js
 ```
 
 ---
 
 ## 🌐 MQTT Topics
 
-| Topic               | Publisher       | Subscriber         | Payload |
-|---------------------|-----------------|--------------------|---------|
-| `farm/pond1/data`   | Sensors / Simulator | Dashboard, Server | JSON telemetry object |
-| `farm/pond1/alerts` | Sensors / Simulator | Dashboard, Server | `{ "status": "MOTION_DETECTED" }` |
+Topics are `<MQTT_TOPIC_BASE>/data` and `<MQTT_TOPIC_BASE>/alerts` (default
+base: `leksfarm/pond1`).
+
+| Topic                  | Publisher           | Subscriber        | Payload |
+|------------------------|---------------------|-------------------|---------|
+| `leksfarm/pond1/data`   | Sensors / Simulator | Dashboard, Server | JSON telemetry object |
+| `leksfarm/pond1/alerts` | Sensors / Simulator | Dashboard, Server | `{ "status": "MOTION_DETECTED" }` |
 
 ### Example telemetry payload:
 ```json
@@ -221,8 +255,11 @@ Terminal 4:  cd farm-dashboard/server && node index.js
 
 When you're ready to connect real sensors, your microcontroller should:
 1. Connect to WiFi
-2. Connect to the same MQTT broker (port 1883)
+2. Connect to the online broker: `broker.emqx.io`, port `1883`
 3. Read sensors every 2–5 seconds
-4. Publish JSON to `farm/pond1/data`
+4. Publish JSON to `leksfarm/pond1/data` (or your custom `MQTT_TOPIC_BASE` + `/data`)
+
+Because the broker is online, the ESP32 at the farm and the dashboard anywhere
+in the world stay connected through the internet — no port forwarding needed.
 
 A full firmware guide can be generated on request.
