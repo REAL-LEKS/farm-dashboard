@@ -80,12 +80,15 @@ async function dispatch({ message, severity, contacts, telemetry }) {
   const subject = `🚨 [${severity.toUpperCase()}] Catfish Farm Alert`;
   const body = buildEmailBody(message, telemetry);
   const smsText = `[Leks' Farm ${severity.toUpperCase()}] ${message} | Pond 1`;
+  // Telegram has no length cost, so it carries the full readings like email.
+  const severityIcon = severity === 'critical' ? '🚨' : severity === 'warning' ? '⚠️' : '📋';
+  const telegramText = `${severityIcon} [${severity.toUpperCase()}] ${message}\n\n${buildTextReport(telemetry)}`;
 
   const channels = [
     { channel: 'SMS', target: contacts.phone, send: () => sendSMS(contacts.phone, smsText) },
     { channel: 'Email', target: contacts.email, send: () => sendEmail(contacts.email, subject, body) },
     { channel: 'WhatsApp', target: contacts.whatsapp, send: () => sendWhatsApp(contacts.whatsapp, smsText) },
-    { channel: 'Telegram', target: contacts.telegram, send: () => sendTelegram(contacts.telegram, smsText) },
+    { channel: 'Telegram', target: contacts.telegram, send: () => sendTelegram(contacts.telegram, telegramText) },
   ];
 
   const settled = await Promise.allSettled(
