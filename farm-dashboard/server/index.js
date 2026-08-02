@@ -419,6 +419,9 @@ app.get('/ping', (_, res) => res.json({
   pong: true,
   uptime: process.uptime(),
   mqtt: mqttClient.connected ? 'connected' : 'disconnected',
+  broker: mqttUrl,
+  topics: [dataTopic, alertsTopic],
+  telegramBot: telegramPolling ? 'polling' : 'off',
   lastPayloadAgoSeconds: lastMqttPayloadAt ? Math.round((Date.now() - lastMqttPayloadAt) / 1000) : null,
 }));
 
