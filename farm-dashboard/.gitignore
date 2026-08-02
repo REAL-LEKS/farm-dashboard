@@ -2,6 +2,7 @@
 .env
 server/.env
 server/settings.json
+server/history.json
 
 # Logs
 logs

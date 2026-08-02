@@ -6,7 +6,7 @@ import {
 
 const TABS = ['Temp & Oxygen', 'pH Trend', 'Water Level'];
 
-export default function ChartsSection({ chartData, theme = 'dark' }) {
+export default function ChartsSection({ chartData, theme = 'dark', csvUrl = null }) {
   const [activeTab, setActiveTab] = useState('Temp & Oxygen');
   const isDark = theme === 'dark';
 
@@ -27,7 +27,18 @@ export default function ChartsSection({ chartData, theme = 'dark' }) {
   return (
     <div className="bg-white border border-slate-200 dark:bg-[#0d1526] dark:border-slate-800 rounded-xl p-5">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h3 className="text-slate-900 dark:text-white font-bold text-sm">Historical Sensor Data</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="text-slate-900 dark:text-white font-bold text-sm">Historical Sensor Data</h3>
+          {csvUrl && (
+            <a
+              href={csvUrl}
+              download
+              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              ⬇ Download CSV
+            </a>
+          )}
+        </div>
         <div className="flex gap-1 bg-slate-100 dark:bg-slate-900 rounded-lg p-1">
           {TABS.map(tab => (
             <button
