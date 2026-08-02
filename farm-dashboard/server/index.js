@@ -255,10 +255,19 @@ mqttClient.on('connect', () => {
 mqttClient.on('reconnect', () => console.log('[MQTT] Reconnecting to broker...'));
 mqttClient.on('offline', () => console.warn('[MQTT] Broker connection offline'));
 
-mqttClient.on('message', async (topic, message) => {
+mqttClient.on('message', async (topic, message, packet) => {
   try {
     const payload = JSON.parse(message.toString());
     const telemetry = normalizeTelemetry(payload);
+
+    // Retained messages are broker replays of the last stored payload, not live
+    // data — remember the readings for /report but never treat them as fresh
+    // or fire alerts from them (they may be hours old).
+    if (packet?.retain) {
+      if (topic === dataTopic) latestTelemetry = telemetry;
+      return;
+    }
+
     lastMqttPayloadAt = Date.now();
     nodeSilenceAlerted = false;
 

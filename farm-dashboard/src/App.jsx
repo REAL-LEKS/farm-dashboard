@@ -127,6 +127,23 @@ function readRuleValue(telemetry, field) {
   return getChannelValue(telemetry, field);
 }
 
+const CHANNEL_FIELDS = [
+  'temperature', 'ph', 'water_level_pct', 'ammonia_risk', 'security_status',
+  'device_connected', 'pipe_status', 'pump_status', 'flow_rate_lpm', 'controller_battery_pct',
+];
+
+// Retained broker messages are replays of the last payload, not live data —
+// show their values but demote every channel to 'stale' so cards read as cached.
+function demoteToCached(snapshot) {
+  const out = { ...snapshot };
+  CHANNEL_FIELDS.forEach(field => {
+    if (out[field] && typeof out[field] === 'object') {
+      out[field] = { ...out[field], status: 'stale' };
+    }
+  });
+  return out;
+}
+
 function getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus, dataTopic) {
   if (!hasReceivedPayload) {
     if (connectionStatus === 'error' || connectionStatus === 'offline') {
@@ -353,11 +370,22 @@ export default function App() {
       });
     });
 
-    client.on('message', (topic, message) => {
+    client.on('message', (topic, message, packet) => {
       try {
         const payload = JSON.parse(message.toString());
         const now = Date.now();
         const snapshot = buildTelemetrySnapshot(payload);
+
+        // A retained message is the broker replaying the LAST payload it stored,
+        // not proof the node is alive. Show it as cached data only: no alerts,
+        // no charts, and the board keeps waiting for a genuinely fresh payload.
+        if (packet?.retain) {
+          if (topic === dataTopic) {
+            setTelemetry(demoteToCached(snapshot));
+            setLastUpdated('cached (node not sending)');
+          }
+          return;
+        }
 
         setLastMessageAt(now);
         setHasReceivedPayload(true);
