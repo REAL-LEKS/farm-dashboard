@@ -55,8 +55,8 @@ export default function NotifySettings({ settings, setSettings, onSave }) {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div className="bg-[#0d1526] border border-slate-800 rounded-xl p-5 space-y-5">
-        <h3 className="text-white font-bold text-sm flex items-center gap-2">
+      <div className="bg-white border border-slate-200 dark:bg-[#0d1526] dark:border-slate-800 rounded-xl p-5 space-y-5">
+        <h3 className="text-slate-900 dark:text-white font-bold text-sm flex items-center gap-2">
           <Server size={16} className="text-emerald-400" /> Connection
         </h3>
         <Field
@@ -118,7 +118,7 @@ export default function NotifySettings({ settings, setSettings, onSave }) {
         <div className="mt-3 flex items-center gap-3 flex-wrap">
           <button
             onClick={detectTelegramChat}
-            className="text-xs font-semibold text-sky-300 border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 rounded-lg px-3 py-2 transition-colors"
+            className="text-xs font-semibold text-sky-600 dark:text-sky-300 border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 rounded-lg px-3 py-2 transition-colors"
           >
             Detect my Chat ID
           </button>
@@ -159,14 +159,14 @@ export default function NotifySettings({ settings, setSettings, onSave }) {
 
       {saveError && <p className="text-red-400 text-xs">{saveError}</p>}
 
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-        <h4 className="text-slate-300 font-bold text-sm mb-3">🚀 Quick Setup Guide</h4>
-        <ol className="space-y-2 text-slate-400 text-sm list-decimal list-inside">
-          <li>Copy <code className="bg-slate-800 px-1 rounded text-xs">.env.example</code> → <code className="bg-slate-800 px-1 rounded text-xs">.env</code></li>
+      <div className="bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-800 rounded-xl p-5">
+        <h4 className="text-slate-700 dark:text-slate-300 font-bold text-sm mb-3">🚀 Quick Setup Guide</h4>
+        <ol className="space-y-2 text-slate-600 dark:text-slate-400 text-sm list-decimal list-inside">
+          <li>Copy <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-xs">.env.example</code> → <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-xs">.env</code></li>
           <li>Sign up for <a href="https://app.brevo.com" target="_blank" rel="noreferrer" className="text-sky-400 underline">Brevo</a> (email) and add your API key</li>
           <li>Sign up for <a href="https://twilio.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">Twilio</a> (SMS) and add your credentials</li>
           <li>Sign up for <a href="https://whapi.cloud" target="_blank" rel="noreferrer" className="text-green-400 underline">Whapi.Cloud</a> (WhatsApp) and scan the QR code</li>
-          <li>Run backend and frontend from this folder with <code className="bg-slate-800 px-1 rounded text-xs">npm run server</code> and <code className="bg-slate-800 px-1 rounded text-xs">npm run dev</code></li>
+          <li>Run backend and frontend from this folder with <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-xs">npm run server</code> and <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-xs">npm run dev</code></li>
           <li>Enter your contact details above and click Save</li>
         </ol>
       </div>
@@ -181,15 +181,15 @@ function ChannelCard({ icon: Icon, color, title, enabled, onToggle, children }) 
     green: 'text-green-400 bg-green-400/10 border-green-500/20',
   };
   return (
-    <div className={`bg-[#0d1526] border rounded-xl p-5 transition-all ${enabled ? 'border-slate-800' : 'border-slate-800/40 opacity-60'}`}>
+    <div className={`bg-white dark:bg-[#0d1526] border rounded-xl p-5 transition-all ${enabled ? 'border-slate-200 dark:border-slate-800' : 'border-slate-200/60 dark:border-slate-800/40 opacity-60'}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <div className={`w-8 h-8 rounded-lg border flex items-center justify-center ${colors[color]}`}>
             <Icon size={16} />
           </div>
-          <h3 className="text-white font-bold text-sm">{title}</h3>
+          <h3 className="text-slate-900 dark:text-white font-bold text-sm">{title}</h3>
         </div>
-        <button onClick={onToggle} className="text-slate-400 hover:text-white transition-colors">
+        <button onClick={onToggle} className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
           {enabled ? <ToggleRight size={24} className="text-emerald-400" /> : <ToggleLeft size={24} />}
         </button>
       </div>
@@ -201,13 +201,13 @@ function ChannelCard({ icon: Icon, color, title, enabled, onToggle, children }) 
 function Field({ label, placeholder, value, onChange, help }) {
   return (
     <div>
-      <label className="block text-slate-400 text-xs font-semibold mb-1.5">{label}</label>
+      <label className="block text-slate-500 dark:text-slate-400 text-xs font-semibold mb-1.5">{label}</label>
       <input
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/60 transition-colors"
+        className="w-full bg-white border border-slate-300 text-slate-900 placeholder-slate-400 dark:bg-slate-900 dark:border-slate-700 dark:text-white dark:placeholder-slate-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500/60 transition-colors"
       />
       {help && <p className="text-slate-600 text-[11px] mt-1.5">{help}</p>}
     </div>

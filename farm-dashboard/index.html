@@ -4,7 +4,13 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>farm-dashboard</title>
+    <title>Leks' Farm Dashboard</title>
+    <script>
+      // Apply the saved theme before React mounts to avoid a flash of the wrong theme.
+      if ((localStorage.getItem('farm_theme') || 'dark') === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

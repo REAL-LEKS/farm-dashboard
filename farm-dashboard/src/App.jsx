@@ -7,7 +7,7 @@ import NotifySettings from './components/NotifySettings';
 import {
   Thermometer, Droplets, Wind, Waves, ShieldCheck, ShieldAlert,
   Wifi, WifiOff, Bell, BellOff, Settings, Fish,
-  LayoutDashboard, ChevronRight, Send, Activity
+  LayoutDashboard, ChevronRight, Send, Activity, Sun, Moon
 } from 'lucide-react';
 
 const COOLDOWN_MS = 10 * 60 * 1000;
@@ -19,8 +19,11 @@ const NODE_SILENCE_MS = 30 * 1000;
 const DEFAULT_MQTT_URL = import.meta.env.VITE_MQTT_URL || 'wss://broker.emqx.io:8084/mqtt';
 const LEGACY_MQTT_URL = 'ws://localhost:9001';
 const MQTT_TOPIC_BASE = import.meta.env.VITE_MQTT_TOPIC_BASE || 'leksfarm/pond1';
-const MQTT_DATA_TOPIC = `${MQTT_TOPIC_BASE}/data`;
-const MQTT_ALERTS_TOPIC = `${MQTT_TOPIC_BASE}/alerts`;
+// Root without the pond segment, so the dashboard can switch between ponds.
+const MQTT_TOPIC_ROOT = MQTT_TOPIC_BASE.replace(/\/pond\d+$/, '');
+const PONDS = [1, 2];
+const pondDataTopic = pond => `${MQTT_TOPIC_ROOT}/pond${pond}/data`;
+const pondAlertsTopic = pond => `${MQTT_TOPIC_ROOT}/pond${pond}/alerts`;
 
 const DEFAULT_CHANNEL = (value, status = 'live', age_seconds = null) => ({ value, status, age_seconds });
 
@@ -124,7 +127,7 @@ function readRuleValue(telemetry, field) {
   return getChannelValue(telemetry, field);
 }
 
-function getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus) {
+function getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus, dataTopic) {
   if (!hasReceivedPayload) {
     if (connectionStatus === 'error' || connectionStatus === 'offline') {
       return {
@@ -143,7 +146,7 @@ function getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectio
     return {
       severity: 'waiting',
       title: 'Waiting for data',
-      message: `Broker link is up but no sensor payload has arrived yet. Make sure the simulator or sensor node is publishing to ${MQTT_DATA_TOPIC} on the same broker.`,
+      message: `Broker link is up but no sensor payload has arrived yet. Make sure the simulator or sensor node is publishing to ${dataTopic} on the same broker.`,
     };
   }
 
@@ -241,7 +244,32 @@ export default function App() {
   const [settings, setSettings] = useState(loadStoredSettings);
   const [mqttConnUrl, setMqttConnUrl] = useState(() => loadStoredSettings().mqttUrl);
   const [connectionStatus, setConnectionStatus] = useState('waiting');
+  const [pond, setPond] = useState(() => {
+    const stored = parseInt(localStorage.getItem('farm_pond'), 10);
+    return PONDS.includes(stored) ? stored : PONDS[0];
+  });
+  const [theme, setTheme] = useState(() => localStorage.getItem('farm_theme') || 'dark');
   const hasLiveTelemetry = hasReceivedPayload && !isNodeStale;
+  const dataTopic = pondDataTopic(pond);
+  const alertsTopic = pondAlertsTopic(pond);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('farm_theme', theme);
+  }, [theme]);
+
+  const switchPond = (nextPond) => {
+    if (nextPond === pond) return;
+    setPond(nextPond);
+    localStorage.setItem('farm_pond', String(nextPond));
+    setTelemetry(EMPTY_TELEMETRY);
+    setChartData([]);
+    setHasReceivedPayload(false);
+    setLastMessageAt(0);
+    setIsNodeStale(false);
+    setLastUpdated('--:--:--');
+    setConnectionStatus('waiting');
+  };
 
   const mqttClient = useRef(null);
   const cooldowns = useRef({});
@@ -307,9 +335,9 @@ export default function App() {
     setConnectionStatus('connecting');
 
     client.on('connect', () => {
-      client.subscribe(MQTT_DATA_TOPIC, err => {
+      client.subscribe(dataTopic, err => {
         if (!err) {
-          client.subscribe(MQTT_ALERTS_TOPIC, err2 => {
+          client.subscribe(alertsTopic, err2 => {
             if (!err2) {
               setIsConnected(true);
               setConnectionStatus('connected');
@@ -338,7 +366,7 @@ export default function App() {
         setIsNodeStale(false);
         nodeSilenceAlerted.current = false;
 
-        if (topic === MQTT_DATA_TOPIC) {
+        if (topic === dataTopic) {
           setTelemetry(snapshot);
 
           const derived = snapshot.derived || EMPTY_TELEMETRY.derived;
@@ -359,7 +387,7 @@ export default function App() {
             if (value === undefined || value === null) return;
             if (rule.check(value)) fireAlert(rule, snapshot);
           });
-        } else if (topic === MQTT_ALERTS_TOPIC) {
+        } else if (topic === alertsTopic) {
           setTelemetry(prev => ({
             ...prev,
             security_status: DEFAULT_CHANNEL(payload.status || 'CLEAR'),
@@ -395,7 +423,7 @@ export default function App() {
       if (connectionTimer) window.clearTimeout(connectionTimer);
       client.end(true);
     };
-  }, [mqttConnUrl, buildTelemetrySnapshot, fireAlert]);
+  }, [mqttConnUrl, dataTopic, alertsTopic, buildTelemetrySnapshot, fireAlert]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -503,18 +531,18 @@ export default function App() {
     { id: 'settings', icon: Settings, label: 'Settings' },
   ];
 
-  const activeAction = getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus);
+  const activeAction = getPriorityAction(telemetry, isNodeStale, hasReceivedPayload, connectionStatus, dataTopic);
 
   return (
-    <div className="min-h-screen bg-[#0a0f1a] text-slate-200 font-sans flex">
-      <aside className="w-20 md:w-64 bg-[#0d1526] border-r border-slate-800/60 flex flex-col py-6 px-3 md:px-5 shrink-0">
+    <div className="min-h-screen bg-slate-100 text-slate-800 dark:bg-[#0a0f1a] dark:text-slate-200 font-sans flex">
+      <aside className="w-20 md:w-64 bg-white border-r border-slate-200 dark:bg-[#0d1526] dark:border-slate-800/60 flex flex-col py-6 px-3 md:px-5 shrink-0">
         <div className="flex items-center gap-3 mb-10 px-1">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
             <Fish className="text-emerald-400" size={20} />
           </div>
           <div className="hidden md:block">
-            <p className="text-white font-bold text-sm leading-tight">Leks' Farm</p>
-            <p className="text-slate-500 text-xs">Pond 1 Monitor</p>
+            <p className="text-slate-900 dark:text-white font-bold text-sm leading-tight">Leks' Farm</p>
+            <p className="text-slate-500 text-xs">Pond {pond} Monitor</p>
           </div>
         </div>
 
@@ -528,8 +556,8 @@ export default function App() {
               }}
               className={`relative flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group
                 ${page === id
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-800/50'}`}
             >
               <Icon size={20} className="shrink-0" />
               <span className="hidden md:block text-sm font-medium">{label}</span>
@@ -544,7 +572,9 @@ export default function App() {
         </nav>
 
         <div className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-xs font-bold
-          ${hasLiveTelemetry ? 'bg-emerald-900/20 border-emerald-800/50 text-emerald-400' : 'bg-red-900/20 border-red-800/50 text-red-400'}`}>
+          ${hasLiveTelemetry
+            ? 'bg-emerald-100 border-emerald-300 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800/50 dark:text-emerald-400'
+            : 'bg-red-100 border-red-300 text-red-700 dark:bg-red-900/20 dark:border-red-800/50 dark:text-red-400'}`}>
           {hasLiveTelemetry
             ? <><Wifi size={14} className="animate-pulse shrink-0" /><span className="hidden md:block">CONNECTED</span></>
             : <><WifiOff size={14} className="shrink-0" /><span className="hidden md:block">Disconnected</span></>}
@@ -552,9 +582,9 @@ export default function App() {
       </aside>
 
       <main className="flex-1 overflow-auto">
-        <header className="sticky top-0 z-10 bg-[#0a0f1a]/80 backdrop-blur border-b border-slate-800/60 px-6 py-4 flex justify-between items-center">
+        <header className="sticky top-0 z-10 bg-white/80 dark:bg-[#0a0f1a]/80 backdrop-blur border-b border-slate-200 dark:border-slate-800/60 px-6 py-4 flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               {page === 'dashboard' && 'Live Dashboard'}
               {page === 'alerts' && 'Alert Log'}
               {page === 'settings' && 'Notification Settings'}
@@ -563,10 +593,33 @@ export default function App() {
             <p className="text-[11px] mt-1 text-slate-500">Status: <span className="font-mono text-slate-400">{connectionStatus === 'receiving' ? 'receiving data' : connectionStatus === 'connected' ? 'broker connected' : connectionStatus === 'connecting' ? 'connecting' : connectionStatus === 'error' ? 'connection error' : 'waiting for data'}</span></p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex gap-1 bg-slate-200 dark:bg-slate-900 rounded-lg p-1">
+              {PONDS.map(p => (
+                <button
+                  key={p}
+                  onClick={() => switchPond(p)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all
+                    ${pond === p
+                      ? 'bg-emerald-600 text-white shadow'
+                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
+                >
+                  <span className="hidden md:inline">Pond </span>{p}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="p-2 rounded-lg border bg-slate-200 border-slate-300 text-slate-600 hover:text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:text-white transition-all"
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <button
               onClick={() => setNotifyEnabled(prev => !prev)}
               title={notifyEnabled ? 'Notifications ON' : 'Notifications OFF'}
-              className={`p-2 rounded-lg border transition-all ${notifyEnabled ? 'bg-emerald-900/20 border-emerald-700/50 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}
+              className={`p-2 rounded-lg border transition-all ${notifyEnabled
+                ? 'bg-emerald-100 border-emerald-300 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-700/50 dark:text-emerald-400'
+                : 'bg-slate-200 border-slate-300 text-slate-500 dark:bg-slate-800 dark:border-slate-700'}`}
             >
               {notifyEnabled ? <Bell size={18} /> : <BellOff size={18} />}
             </button>
@@ -595,6 +648,7 @@ export default function App() {
               hasLiveTelemetry={hasLiveTelemetry}
               activeAction={activeAction}
               lastMessageAt={lastMessageAt}
+              theme={theme}
             />
           )}
           {page === 'alerts' && (
@@ -609,7 +663,7 @@ export default function App() {
   );
 }
 
-function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConnected, isNodeStale, hasLiveTelemetry, activeAction, lastMessageAt }) {
+function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConnected, isNodeStale, hasLiveTelemetry, activeAction, lastMessageAt, theme }) {
   const measuredCards = [
     { key: 'temperature', title: 'Temperature', unit: '°C', color: 'orange', icon: Thermometer, optimal: '26–30°C' },
     { key: 'ph', title: 'pH Level', unit: '', color: 'violet', icon: Droplets, optimal: '6.5–8.5' },
@@ -632,7 +686,7 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
           <WifiOff className="text-red-400 shrink-0" size={22} />
           <div>
             <p className="text-red-400 font-bold text-sm">NODE SILENCE</p>
-            <p className="text-red-300/70 text-xs">No MQTT payload has arrived for 30 seconds. Cards show the last received readings until data resumes.</p>
+            <p className="text-red-700/80 dark:text-red-300/70 text-xs">No MQTT payload has arrived for 30 seconds. Cards show the last received readings until data resumes.</p>
           </div>
         </div>
       )}
@@ -642,7 +696,7 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
           <ShieldAlert className="text-red-400 shrink-0" size={22} />
           <div>
             <p className="text-red-400 font-bold text-sm">INTRUDER ALERT</p>
-            <p className="text-red-300/70 text-xs">Motion detected at pond — check the perimeter camera and gate.</p>
+            <p className="text-red-700/80 dark:text-red-300/70 text-xs">Motion detected at pond — check the perimeter camera and gate.</p>
           </div>
         </div>
       )}
@@ -652,7 +706,7 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
           <WifiOff className="text-red-400 shrink-0" size={22} />
           <div>
             <p className="text-red-400 font-bold text-sm">DEVICE OFFLINE</p>
-            <p className="text-red-300/70 text-xs">Controller is not connected. Check power, cable, and network.</p>
+            <p className="text-red-700/80 dark:text-red-300/70 text-xs">Controller is not connected. Check power, cable, and network.</p>
           </div>
         </div>
       )}
@@ -660,7 +714,7 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-white font-bold text-sm">Measured</h2>
+            <h2 className="text-slate-900 dark:text-white font-bold text-sm">Measured</h2>
             <p className="text-slate-500 text-xs">Live channels, cached fallbacks, stale reads, and failed gates.</p>
           </div>
           <p className="text-slate-500 text-xs font-mono">Seq {telemetry.sequence} · Uptime {formatUptime(telemetry.uptime_seconds)}</p>
@@ -696,7 +750,7 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
 
       <section className="space-y-3">
         <div>
-          <h2 className="text-white font-bold text-sm">Derived</h2>
+          <h2 className="text-slate-900 dark:text-white font-bold text-sm">Derived</h2>
           <p className="text-slate-500 text-xs">Estimated oxygen output and trend signals from the local model.</p>
         </div>
 
@@ -712,11 +766,11 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
         </p>
       </section>
 
-      <ChartsSection chartData={chartData} />
+      <ChartsSection chartData={chartData} theme={theme} />
 
       {alerts.length > 0 && (
-        <div className="bg-[#0d1526] border border-slate-800 rounded-xl p-5">
-          <h3 className="text-white font-bold text-sm mb-4 flex items-center gap-2">
+        <div className="bg-white border border-slate-200 dark:bg-[#0d1526] dark:border-slate-800 rounded-xl p-5">
+          <h3 className="text-slate-900 dark:text-white font-bold text-sm mb-4 flex items-center gap-2">
             <Bell size={16} className="text-yellow-400" /> Recent Alerts
           </h3>
           <div className="space-y-2">
@@ -725,11 +779,11 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
                 ${alert.severity === 'critical' ? 'bg-red-900/10 border-red-800/40' : 'bg-yellow-900/10 border-yellow-800/40'}
                 ${alert.acknowledged ? 'opacity-40' : ''}`}>
                 <div>
-                  <span className={`font-semibold ${alert.severity === 'critical' ? 'text-red-400' : 'text-yellow-400'}`}>{alert.message}</span>
+                  <span className={`font-semibold ${alert.severity === 'critical' ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400'}`}>{alert.message}</span>
                   <span className="text-slate-500 text-xs ml-2">{alert.time}</span>
                 </div>
                 {!alert.acknowledged && (
-                  <button onClick={() => acknowledgeAlert(alert.id)} className="text-xs text-slate-400 hover:text-white border border-slate-700 rounded px-2 py-1 shrink-0">ACK</button>
+                  <button onClick={() => acknowledgeAlert(alert.id)} className="text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shrink-0">ACK</button>
                 )}
               </div>
             ))}
@@ -742,8 +796,8 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
 
 function ReportResultBanner({ result, onDismiss }) {
   const statusStyle = {
-    sent: 'text-emerald-400',
-    failed: 'text-red-400',
+    sent: 'text-emerald-600 dark:text-emerald-400',
+    failed: 'text-red-600 dark:text-red-400',
     skipped: 'text-slate-500',
   };
   const statusIcon = { sent: '✅', failed: '❌', skipped: '⏭️' };
@@ -758,7 +812,7 @@ function ReportResultBanner({ result, onDismiss }) {
       : 'bg-emerald-900/10 border-emerald-800/40'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-white font-bold text-sm">
+          <p className="text-slate-900 dark:text-white font-bold text-sm">
             {result.error ? 'Report could not be sent' : `Report delivery${result.time ? ` · ${result.time}` : ''}`}
           </p>
           {result.error ? (
@@ -768,7 +822,7 @@ function ReportResultBanner({ result, onDismiss }) {
               {result.results.map(r => (
                 <li key={r.channel} className="text-xs flex gap-2">
                   <span>{statusIcon[r.status] || '•'}</span>
-                  <span className="text-slate-300 font-semibold w-16 shrink-0">{r.channel}</span>
+                  <span className="text-slate-700 dark:text-slate-300 font-semibold w-16 shrink-0">{r.channel}</span>
                   <span className={statusStyle[r.status] || 'text-slate-400'}>
                     {r.status === 'sent' ? r.detail || 'Sent' : r.status === 'skipped' ? r.detail || 'Skipped' : r.detail || 'Failed'}
                   </span>
@@ -777,7 +831,7 @@ function ReportResultBanner({ result, onDismiss }) {
             </ul>
           )}
         </div>
-        <button onClick={onDismiss} className="text-slate-500 hover:text-white text-xs border border-slate-700 rounded px-2 py-1 shrink-0">
+        <button onClick={onDismiss} className="text-slate-500 hover:text-slate-900 dark:hover:text-white text-xs border border-slate-300 dark:border-slate-700 rounded px-2 py-1 shrink-0">
           Dismiss
         </button>
       </div>
@@ -803,9 +857,9 @@ function PriorityActionCard({ action, isNodeStale }) {
             : <Activity className="text-emerald-300" size={20} />}
         </div>
         <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{isNodeStale ? 'Highest active condition' : 'Current priority'}</p>
-          <h3 className="text-lg font-bold text-white mt-1">{action.title}</h3>
-          <p className="text-sm text-slate-200/90 mt-1">{action.message}</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{isNodeStale ? 'Highest active condition' : 'Current priority'}</p>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-1">{action.title}</h3>
+          <p className="text-sm text-slate-700 dark:text-slate-200/90 mt-1">{action.message}</p>
         </div>
       </div>
     </div>
@@ -816,11 +870,11 @@ function DerivedOxygenCard({ derived }) {
   const range = derived?.estimated_range || { low: '—', high: '—' };
 
   return (
-    <div className="xl:col-span-2 rounded-2xl border border-slate-800 bg-[#0d1526] p-5 shadow-lg">
+    <div className="xl:col-span-2 rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#0d1526] p-5 shadow-lg">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <p className="text-slate-500 text-xs uppercase tracking-[0.18em]">Oxygen output</p>
-          <h4 className="text-white font-bold text-sm mt-1">Estimated range</h4>
+          <h4 className="text-slate-900 dark:text-white font-bold text-sm mt-1">Estimated range</h4>
         </div>
         <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
           <Activity className="text-sky-300" size={18} />
@@ -828,14 +882,14 @@ function DerivedOxygenCard({ derived }) {
       </div>
 
       <div className="flex items-end gap-2">
-        <span className="text-4xl font-black tracking-tight text-white">{range.low}</span>
-        <span className="text-3xl font-semibold text-sky-300">- {range.high}</span>
+        <span className="text-4xl font-black tracking-tight text-slate-900 dark:text-white">{range.low}</span>
+        <span className="text-3xl font-semibold text-sky-600 dark:text-sky-300">- {range.high}</span>
         <span className="text-sm text-slate-500 mb-1">mg/L</span>
       </div>
 
-      <div className="mt-4 border-t border-slate-800 pt-3 space-y-2">
-        <p className="text-slate-400 text-xs">Ceiling</p>
-        <p className="text-sky-300 text-sm font-semibold">{derived?.saturation_ceiling ?? '—'} mg/L</p>
+      <div className="mt-4 border-t border-slate-200 dark:border-slate-800 pt-3 space-y-2">
+        <p className="text-slate-500 dark:text-slate-400 text-xs">Ceiling</p>
+        <p className="text-sky-600 dark:text-sky-300 text-sm font-semibold">{derived?.saturation_ceiling ?? '—'} mg/L</p>
         <p className="text-slate-500 text-[11px]">Risk band: {derived?.risk_band ?? '—'}</p>
       </div>
     </div>
@@ -844,18 +898,18 @@ function DerivedOxygenCard({ derived }) {
 
 function DerivedStatCard({ label, value, accent, note }) {
   const colorMap = {
-    sky: 'text-sky-300 border-sky-500/20 bg-sky-500/10',
-    violet: 'text-violet-300 border-violet-500/20 bg-violet-500/10',
-    yellow: 'text-yellow-300 border-yellow-500/20 bg-yellow-500/10',
+    sky: 'text-sky-600 dark:text-sky-300 border-sky-500/20 bg-sky-500/10',
+    violet: 'text-violet-600 dark:text-violet-300 border-violet-500/20 bg-violet-500/10',
+    yellow: 'text-yellow-600 dark:text-yellow-300 border-yellow-500/20 bg-yellow-500/10',
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-[#0d1526] p-5 shadow-lg">
+    <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#0d1526] p-5 shadow-lg">
       <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${colorMap[accent] || colorMap.sky}`}>
         <Activity size={18} />
       </div>
       <p className="text-slate-500 text-xs mt-4">{label}</p>
-      <p className="text-white font-bold text-base mt-1">{value}</p>
+      <p className="text-slate-900 dark:text-white font-bold text-base mt-1">{value}</p>
       {note && <p className="text-slate-500 text-[11px] mt-2">{note}</p>}
     </div>
   );
