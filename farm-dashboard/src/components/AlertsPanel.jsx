@@ -32,14 +32,14 @@ export default function AlertsPanel({ alerts, acknowledgeAlert }) {
             className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all capitalize
               ${filter === f
                 ? 'bg-emerald-600 border-emerald-500 text-white'
-                : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'}`}
+                : 'bg-white border-slate-300 text-slate-500 hover:text-slate-900 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-white'}`}
           >
             {f} {f === 'all' ? `(${alerts.length})` : f === 'unread' ? `(${alerts.filter(a => !a.acknowledged).length})` : ''}
           </button>
         ))}
         <button
           onClick={() => alerts.forEach(a => acknowledgeAlert(a.id))}
-          className="ml-auto px-3 py-1 rounded-full text-xs font-semibold border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-all"
+          className="ml-auto px-3 py-1 rounded-full text-xs font-semibold border border-slate-300 text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-white hover:border-slate-500 transition-all"
         >
           Acknowledge All
         </button>
@@ -75,7 +75,7 @@ function AlertRow({ alert, onAck }) {
           : <AlertTriangle size={18} className="text-yellow-400 shrink-0" />}
 
         <div className="flex-1 min-w-0">
-          <p className={`font-semibold text-sm ${isCrit ? 'text-red-300' : 'text-yellow-300'}`}>
+          <p className={`font-semibold text-sm ${isCrit ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300'}`}>
             {alert.message}
           </p>
           <p className="text-slate-500 text-xs mt-0.5 font-mono">{alert.time}</p>
@@ -84,14 +84,14 @@ function AlertRow({ alert, onAck }) {
         <div className="flex items-center gap-2 shrink-0">
           <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border
             ${isCrit
-              ? 'text-red-400 border-red-700/50 bg-red-900/30'
-              : 'text-yellow-400 border-yellow-700/50 bg-yellow-900/30'}`}>
+              ? 'text-red-700 border-red-300 bg-red-100 dark:text-red-400 dark:border-red-700/50 dark:bg-red-900/30'
+              : 'text-yellow-700 border-yellow-300 bg-yellow-100 dark:text-yellow-400 dark:border-yellow-700/50 dark:bg-yellow-900/30'}`}>
             {alert.severity}
           </span>
           {!alert.acknowledged && (
             <button
               onClick={e => { e.stopPropagation(); onAck(); }}
-              className="text-[10px] font-bold text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-0.5 transition-all"
+              className="text-[10px] font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white border border-slate-300 dark:border-slate-700 hover:border-slate-500 rounded px-2 py-0.5 transition-all"
             >
               ACK
             </button>
@@ -100,7 +100,7 @@ function AlertRow({ alert, onAck }) {
       </div>
 
       {expanded && alert.telemetry && (
-        <div className="px-4 pb-4 border-t border-slate-800/50">
+        <div className="px-4 pb-4 border-t border-slate-200 dark:border-slate-800/50">
           <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mt-3 mb-2">Sensor Snapshot at Alert Time</p>
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
             {[
@@ -116,9 +116,9 @@ function AlertRow({ alert, onAck }) {
               { label: 'Oxygen', val: alert.telemetry.derived?.risk_band ?? '—', unit: '' },
               { label: 'Range', val: alert.telemetry.derived?.estimated_range ? `${alert.telemetry.derived.estimated_range.low}-${alert.telemetry.derived.estimated_range.high}` : '—', unit: 'mg/L' },
             ].map(({ label, val, unit }) => (
-              <div key={label} className="bg-slate-900 rounded-lg p-2 text-center">
+              <div key={label} className="bg-slate-100 dark:bg-slate-900 rounded-lg p-2 text-center">
                 <p className="text-slate-500 text-[10px]">{label}</p>
-                <p className="text-white text-xs font-bold mt-0.5">{val ?? 'N/A'}{unit}</p>
+                <p className="text-slate-900 dark:text-white text-xs font-bold mt-0.5">{val ?? 'N/A'}{unit}</p>
               </div>
             ))}
           </div>

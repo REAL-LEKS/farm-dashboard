@@ -30,20 +30,20 @@ export default function MetricCard({ title, value, unit, color = 'emerald', icon
     : 'live';
 
   const cardClass = visualState === 'failed'
-    ? 'bg-red-950/20 border-red-900/50 shadow-lg shadow-red-900/20'
+    ? 'bg-red-100/60 border-red-300 dark:bg-red-950/20 dark:border-red-900/50 shadow-lg dark:shadow-red-900/20'
     : visualState === 'stale'
-    ? 'bg-slate-900/40 border-slate-800/60'
+    ? 'bg-slate-200/60 border-slate-300 dark:bg-slate-900/40 dark:border-slate-800/60'
     : visualState === 'substituted'
-    ? 'bg-slate-900/55 border-slate-700/60 shadow-lg shadow-slate-950/20'
-    : `bg-[#0d1526] border-slate-800 shadow-lg ${c.glow}`;
+    ? 'bg-slate-200/80 border-slate-300 dark:bg-slate-900/55 dark:border-slate-700/60 shadow-lg dark:shadow-slate-950/20'
+    : `bg-white border-slate-200 dark:bg-[#0d1526] dark:border-slate-800 shadow-lg ${c.glow}`;
 
   const valueClass = visualState === 'failed'
-    ? 'text-red-400'
+    ? 'text-red-600 dark:text-red-400'
     : visualState === 'stale'
-    ? 'text-slate-400'
+    ? 'text-slate-500 dark:text-slate-400'
     : visualState === 'substituted'
-    ? 'text-slate-300'
-    : 'text-white';
+    ? 'text-slate-600 dark:text-slate-300'
+    : 'text-slate-900 dark:text-white';
 
   const note = visualState === 'failed'
     ? 'Read failed'
