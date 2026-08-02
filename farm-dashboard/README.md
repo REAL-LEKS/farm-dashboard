@@ -35,15 +35,15 @@ The app is wired to the **free public EMQX broker** (`broker.emqx.io`) by defaul
 so data flows over the internet with zero broker setup:
 
 ```
-Sensors / Simulator ──mqtt://broker.emqx.io:1883──▶ ┌──────────────────┐
+Sensors / Simulator ─mqtts://broker.emqx.io:8883──▶ ┌──────────────────┐
                                                     │  EMQX broker      │
 Dashboard (browser) ◀─wss://broker.emqx.io:8084/mqtt┤  (public, online) │
-Notification server ◀──mqtt://broker.emqx.io:1883───┘
+Notification server ◀─mqtts://broker.emqx.io:8883───┘
 ```
 
 - **Browser** connects over secure WebSockets (`wss://`) — required when the
   dashboard is served over HTTPS (e.g. on Render).
-- **Server, simulator, and hardware** connect over plain MQTT (`mqtt://`, port 1883).
+- **Server, simulator, and hardware** connect over MQTT with TLS (`mqtts://`, port 8883) — plain port 1883 is blocked on many networks.
 - Topics live under a farm-specific base (`leksfarm/pond1` by default). The public
   broker is shared by everyone, so set `MQTT_TOPIC_BASE` / `VITE_MQTT_TOPIC_BASE`
   to something unique to your farm — all parts must use the same value.
@@ -268,7 +268,7 @@ base: `leksfarm/pond1`).
 
 When you're ready to connect real sensors, your microcontroller should:
 1. Connect to WiFi
-2. Connect to the online broker: `broker.emqx.io`, port `1883`
+2. Connect to the online broker: `broker.emqx.io`, port `8883` with TLS (plain `1883` is often blocked)
 3. Read sensors every 2–5 seconds
 4. Publish JSON to `leksfarm/pond1/data` (or your custom `MQTT_TOPIC_BASE` + `/data`)
 
