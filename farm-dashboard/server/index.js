@@ -324,6 +324,82 @@ setInterval(async () => {
 
 mqttClient.on('error', err => console.error('[MQTT] Error:', err.message));
 
+// ── Telemetry history (powers /api/history, CSV export, and Google Sheets) ──
+const HISTORY_FILE = path.join(__dirname, 'history.json');
+const HISTORY_SAMPLE_MS = 60 * 1000;   // one row per minute
+const HISTORY_MAX_ROWS = 7 * 24 * 60;  // keep up to 7 days
+
+let history = [];
+try {
+  if (fs.existsSync(HISTORY_FILE)) history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+} catch (e) {
+  console.error('[History] Failed to load:', e.message);
+}
+
+function buildHistoryRow() {
+  const t = latestTelemetry;
+  const range = t?.derived?.estimated_range || {};
+  return {
+    ts: Date.now(),
+    time: new Date().toISOString(),
+    temperature: getChannelValue(t, 'temperature') ?? null,
+    ph: getChannelValue(t, 'ph') ?? null,
+    water_level_pct: getChannelValue(t, 'water_level_pct') ?? null,
+    ammonia_risk: getChannelValue(t, 'ammonia_risk') ?? null,
+    security_status: getChannelValue(t, 'security_status') ?? null,
+    flow_rate_lpm: getChannelValue(t, 'flow_rate_lpm') ?? null,
+    controller_battery_pct: getChannelValue(t, 'controller_battery_pct') ?? null,
+    oxygen_low: range.low ?? null,
+    oxygen_high: range.high ?? null,
+    oxygen_risk_band: t?.derived?.risk_band ?? null,
+  };
+}
+
+const sheetsWebhookUrl = (process.env.GOOGLE_SHEETS_WEBHOOK_URL || '').trim();
+
+setInterval(() => {
+  // Only record while fresh data is flowing — no rows of stale repeats.
+  if (!latestTelemetry) return;
+  if (Date.now() - lastMqttPayloadAt > 2 * HISTORY_SAMPLE_MS) return;
+
+  const row = buildHistoryRow();
+  history.push(row);
+  if (history.length > HISTORY_MAX_ROWS) history = history.slice(-HISTORY_MAX_ROWS);
+
+  try {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history));
+  } catch (e) {
+    console.error('[History] Failed to save:', e.message);
+  }
+
+  if (sheetsWebhookUrl) {
+    fetch(sheetsWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(row),
+    }).catch(e => console.warn('[Sheets] Push failed:', e.message));
+  }
+}, HISTORY_SAMPLE_MS);
+
+const HISTORY_COLUMNS = [
+  'time', 'temperature', 'ph', 'water_level_pct', 'ammonia_risk', 'security_status',
+  'flow_rate_lpm', 'controller_battery_pct', 'oxygen_low', 'oxygen_high', 'oxygen_risk_band',
+];
+
+app.get('/api/history', (req, res) => {
+  const hours = Math.min(Number.parseFloat(req.query.hours) || 24, 168);
+  const cutoff = Date.now() - hours * 3600 * 1000;
+  res.json({ rows: history.filter(r => r.ts >= cutoff) });
+});
+
+app.get('/api/history.csv', (_, res) => {
+  const lines = [HISTORY_COLUMNS.join(',')];
+  history.forEach(r => lines.push(HISTORY_COLUMNS.map(c => r[c] ?? '').join(',')));
+  res.type('text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="pond1-history.csv"');
+  res.send(lines.join('\n'));
+});
+
 // ── Telegram bot commands ────────────────────────────────────────────────────
 // Long-polls getUpdates so the farmer can request a status report from chat:
 // /report replies with the latest pond readings, /help shows the chat ID.

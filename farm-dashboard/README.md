@@ -195,6 +195,39 @@ last sensor payload — handy for a quick health check from a phone:
 
 ---
 
+## 📊 Data Logging & Export
+
+While fresh data is flowing, the server records **one row per minute** (up to
+7 days) with temperature, pH, water level, ammonia, security, flow, battery,
+and the oxygen estimate.
+
+- **Excel / CSV** — click **⬇ Download CSV** next to "Historical Sensor Data"
+  on the dashboard (or open `/api/history.csv`). The file opens directly in
+  Excel.
+- **API** — `GET /api/history?hours=24` returns the rows as JSON. The dashboard
+  uses this to pre-fill the charts on page load.
+- **Google Sheets (permanent archive)** — the server's local log is wiped when
+  the host redeploys, so for a forever-archive stream rows into a Sheet:
+  1. Create a Google Sheet → **Extensions → Apps Script**, paste:
+     ```js
+     function doPost(e) {
+       const r = JSON.parse(e.postData.contents);
+       SpreadsheetApp.getActiveSpreadsheet().getActiveSheet().appendRow([
+         r.time, r.temperature, r.ph, r.water_level_pct, r.ammonia_risk,
+         r.security_status, r.flow_rate_lpm, r.controller_battery_pct,
+         r.oxygen_low, r.oxygen_high, r.oxygen_risk_band,
+       ]);
+       return ContentService.createTextOutput('ok');
+     }
+     ```
+  2. **Deploy → New deployment → Web app**, execute as *Me*, access:
+     *Anyone*. Copy the web app URL.
+  3. Set `GOOGLE_SHEETS_WEBHOOK_URL` to that URL on the server (Render →
+     Environment). One new row appears in the Sheet every minute while the
+     pond node is publishing.
+
+---
+
 ## 🔌 Alert Thresholds
 
 | Sensor            | Warning           | Critical              |

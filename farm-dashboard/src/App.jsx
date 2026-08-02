@@ -479,6 +479,30 @@ export default function App() {
     return () => clearInterval(interval);
   }, [lastMessageAt, telemetry, fireAlert]);
 
+  // Seed the charts with recent server-side history so they aren't empty on
+  // page load. The server only logs pond 1 (where the hardware lives).
+  useEffect(() => {
+    if (pond !== 1 || !settings.serverUrl) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`${settings.serverUrl}/api/history?hours=2`);
+        const data = await response.json();
+        if (cancelled || !Array.isArray(data.rows) || data.rows.length === 0) return;
+        const seeded = data.rows.slice(-30).map(row => ({
+          time: new Date(row.ts).toLocaleTimeString(),
+          temp: Number.isFinite(row.temperature) ? row.temperature : null,
+          ph: Number.isFinite(row.ph) ? row.ph : null,
+          water: Number.isFinite(row.water_level_pct) ? row.water_level_pct : null,
+          oxygenLow: Number.isFinite(row.oxygen_low) ? row.oxygen_low : null,
+          oxygenHigh: Number.isFinite(row.oxygen_high) ? row.oxygen_high : null,
+        }));
+        setChartData(prev => (prev.length > 0 ? prev : seeded));
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [pond, settings.serverUrl]);
+
   const acknowledgeAlert = (id) => {
     setAlerts(prev => prev.map(alert => (alert.id === id ? { ...alert, acknowledged: true } : alert)));
   };
@@ -677,6 +701,7 @@ export default function App() {
               activeAction={activeAction}
               lastMessageAt={lastMessageAt}
               theme={theme}
+              csvUrl={pond === 1 && settings.serverUrl ? `${settings.serverUrl}/api/history.csv` : null}
             />
           )}
           {page === 'alerts' && (
@@ -691,7 +716,7 @@ export default function App() {
   );
 }
 
-function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConnected, isNodeStale, hasLiveTelemetry, activeAction, lastMessageAt, theme }) {
+function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConnected, isNodeStale, hasLiveTelemetry, activeAction, lastMessageAt, theme, csvUrl }) {
   const measuredCards = [
     { key: 'temperature', title: 'Temperature', unit: '°C', color: 'orange', icon: Thermometer, optimal: '26–30°C' },
     { key: 'ph', title: 'pH Level', unit: '', color: 'violet', icon: Droplets, optimal: '6.5–8.5' },
@@ -794,7 +819,7 @@ function DashboardPage({ telemetry, chartData, alerts, acknowledgeAlert, isConne
         </p>
       </section>
 
-      <ChartsSection chartData={chartData} theme={theme} />
+      <ChartsSection chartData={chartData} theme={theme} csvUrl={csvUrl} />
 
       {alerts.length > 0 && (
         <div className="bg-white border border-slate-200 dark:bg-[#0d1526] dark:border-slate-800 rounded-xl p-5">
