@@ -7,7 +7,7 @@
  * Usage: node simulator.js
  *
  * Options (env vars):
- *   MQTT_URL=mqtt://broker.emqx.io:1883   (default — free public online broker)
+ *   MQTT_URL=mqtts://broker.emqx.io:8883  (default — free public online broker, TLS)
  *   MQTT_TOPIC_BASE=leksfarm/pond1        (default)
  *   INTERVAL_MS=2000                      (publish every 2s by default)
  *   SCENARIO=normal|crisis|intruder|faults
@@ -15,7 +15,7 @@
 
 import mqtt from 'mqtt';
 
-const MQTT_URL = process.env.MQTT_URL || 'mqtt://broker.emqx.io:1883';
+const MQTT_URL = process.env.MQTT_URL || 'mqtts://broker.emqx.io:8883';
 const TOPIC_BASE = process.env.MQTT_TOPIC_BASE || 'leksfarm/pond1';
 const DATA_TOPIC = `${TOPIC_BASE}/data`;
 const ALERTS_TOPIC = `${TOPIC_BASE}/alerts`;

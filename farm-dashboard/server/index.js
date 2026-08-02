@@ -234,7 +234,8 @@ app.get('/api/telegram/chats', async (_, res) => {
 
 // Default to the free public EMQX broker so the deployed server receives
 // online data with zero broker setup. Override with MQTT_URL for a private broker.
-const mqttUrl = process.env.MQTT_URL || 'mqtt://broker.emqx.io:1883';
+// TLS port 8883: plain 1883 is blocked on many networks and hosts.
+const mqttUrl = process.env.MQTT_URL || 'mqtts://broker.emqx.io:8883';
 // Public brokers are shared — keep the topic base unique to this farm.
 const topicBase = process.env.MQTT_TOPIC_BASE || 'leksfarm/pond1';
 const dataTopic = `${topicBase}/data`;
