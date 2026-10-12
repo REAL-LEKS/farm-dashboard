@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: farm-dashboard
+    env: node
+    plan: free
+    rootDir: farm-dashboard
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MQTT_URL
+        value: mqtt://broker.emqx.io:1883
+      - key: VITE_MQTT_URL
+        value: wss://broker.emqx.io:8084/mqtt
+      - key: MQTT_TOPIC_BASE
+        value: leksfarm/pond1
+      - key: VITE_MQTT_TOPIC_BASE
+        value: leksfarm/pond1
+
+  - type: worker
+    name: farm-simulator
+    env: node
+    plan: starter
+    rootDir: farm-dashboard
+    buildCommand: npm install
+    startCommand: node server/simulator.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MQTT_URL
+        value: mqtt://broker.emqx.io:1883
+      - key: MQTT_TOPIC_BASE
+        value: leksfarm/pond1
+      - key: SCENARIO
+        value: normal
+      - key: INTERVAL_MS
+        value: "2000"
