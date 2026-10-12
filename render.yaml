@@ -10,7 +10,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: MQTT_URL
-        value: mqtt://broker.emqx.io:1883
+        value: mqtts://broker.emqx.io:8883
       - key: VITE_MQTT_URL
         value: wss://broker.emqx.io:8084/mqtt
       - key: MQTT_TOPIC_BASE
@@ -29,7 +29,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: MQTT_URL
-        value: mqtt://broker.emqx.io:1883
+        value: mqtts://broker.emqx.io:8883
       - key: MQTT_TOPIC_BASE
         value: leksfarm/pond1
       - key: SCENARIO
