@@ -13,6 +13,7 @@
  *   SCENARIO=normal|crisis|intruder|faults
  */
 
+import http from 'node:http';
 import mqtt from 'mqtt';
 
 const MQTT_URL = process.env.MQTT_URL || 'mqtts://broker.emqx.io:8883';
@@ -21,6 +22,22 @@ const DATA_TOPIC = `${TOPIC_BASE}/data`;
 const ALERTS_TOPIC = `${TOPIC_BASE}/alerts`;
 const INTERVAL_MS = parseInt(process.env.INTERVAL_MS, 10) || 2000;
 const SCENARIO = process.env.SCENARIO || 'normal';
+const PORT = Number.parseInt(process.env.PORT, 10) || 10000;
+
+const healthServer = http.createServer((request, response) => {
+  if (request.url === '/health' || request.url === '/') {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ok: true, mqtt: client.connected, scenario: SCENARIO }));
+    return;
+  }
+
+  response.writeHead(404);
+  response.end();
+});
+
+healthServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`   Health:   http://0.0.0.0:${PORT}/health`);
+});
 
 const client = mqtt.connect(MQTT_URL, { reconnectPeriod: 5000, connectTimeout: 15000 });
 

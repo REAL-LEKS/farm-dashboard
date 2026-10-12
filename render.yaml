@@ -18,10 +18,10 @@ services:
       - key: VITE_MQTT_TOPIC_BASE
         value: leksfarm/pond1
 
-  - type: worker
+  - type: web
     name: farm-simulator
     env: node
-    plan: starter
+    plan: free
     rootDir: farm-dashboard
     buildCommand: npm install
     startCommand: node server/simulator.js
