@@ -37,3 +37,13 @@ jobs:
           done
           echo "Site did not respond after 3 attempts."
           exit 1
+
+      - name: Wake simulator
+        if: ${{ vars.SIMULATOR_URL != '' }}
+        env:
+          SIMULATOR_URL: ${{ vars.SIMULATOR_URL }}
+        run: |
+          URL="${SIMULATOR_URL%/}"
+          echo "Pinging $URL/health"
+          curl -fsS --max-time 90 "$URL/health"
+          echo
